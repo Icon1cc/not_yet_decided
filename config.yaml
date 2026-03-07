@@ -2,11 +2,12 @@ data:
   source: data/source_products_tv_&_audio.json
 
 subset:
-  n: null  # number of source products to test on; set to null for all
+  n: 3  # number of source products to test on; set to null for all
 
 exact_match:
   # min cumulative weight to include a candidate as a match
-  threshold: 0.5
+  # 0.4 = requires at minimum a name match; price alone (0.2) no longer qualifies
+  threshold: 0.4
   columns:
     - source_field: ean
       target_field: ean
@@ -17,18 +18,17 @@ exact_match:
     - source_field: name
       target_field: name
       weight: 0.4
-    - source_field: price_eur
-      target_field: price_eur
-      weight: 0.2
 
 qdrant:
   url: "http://localhost:6333"
   collection: "products"
   embedding_model: "openai/text-embedding-3-small"
   embedding_dim: 1536
-  top_k: 20
-  min_score: 0.3
+  top_k_per_term: 10   # BM25 results per query expansion term (union across all terms)
+  min_score: 0.0       # include all BM25 hits; LLM does the filtering
   category_filter: "TV & Audio"  # null = no filter; must match product["category"] exactly
+  price_range_factor: 0.3  # filter targets within ±30% of source price; null-price targets always included
+  size_range_delta: 2      # filter targets within ±2 units of source size (same unit); no-size targets always included
 
 llm:
   model: anthropic/claude-sonnet-4-5

@@ -6,7 +6,9 @@ from datetime import datetime
 from dotenv import load_dotenv
 from models import SourceMatch, Submission
 from retrieval.exact_match import exact_match
+from retrieval.enrichment import enrich_products
 from retrieval.qdrant_retrieval import QdrantRetriever
+from retrieval.query_expansion import expand_query
 from retrieval.generation import filter_candidates
 load_dotenv()
 
@@ -61,31 +63,39 @@ def main():
     targets = retriever.fetch_all(qdrant_cfg["category_filter"])
     print(f"Fetched {len(targets)} target products from Qdrant")
 
+    print("\nEnriching source products...")
+    sources = enrich_products(sources, os.environ["OPENROUTER_API_KEY"])
+    print(f"Source product types: { {s['reference']: s.get('product_type') for s in sources} }")
+
     # ── Phase 1: retrieval (fast) ─────────────────────────────────────────────
     print("=" * 70)
     print("PHASE 1: Retrieval (exact match + Qdrant hybrid)")
     print("=" * 70)
 
-    retrievals = []  # (source, exact_hits, qdrant_hits, candidates)
+    retrievals = []  # (source, exact_hits, bm25_hits, candidates)
     for source in sources:
         exact_hits = exact_match(source, targets, exact_cfg["columns"], exact_cfg["threshold"])
-        qdrant_hits = retriever.retrieve(
-            source,
-            qdrant_cfg["top_k"],
-            qdrant_cfg["category_filter"],
-            qdrant_cfg["min_score"],
+
+        terms = expand_query(source, llm_model)
+        bm25_hits = retriever.retrieve_multi(
+            terms,
+            top_k_per_term=qdrant_cfg["top_k_per_term"],
+            category=qdrant_cfg["category_filter"],
+            min_score=qdrant_cfg["min_score"],
         )
-        candidates = fuse(exact_hits, qdrant_hits, max_candidates)
-        retrievals.append((source, exact_hits, qdrant_hits, candidates))
+
+        candidates = fuse(exact_hits, bm25_hits, max_candidates)
+        retrievals.append((source, exact_hits, bm25_hits, candidates))
 
         exact_refs = {d["reference"] for d, _ in exact_hits}
         print(f"\n{source['reference']} | {source.get('name', '')[:60]}")
-        print(f"  exact={len(exact_hits)}  qdrant={len(qdrant_hits)}  candidates={len(candidates)}")
+        print(f"  terms={terms}")
+        print(f"  exact={len(exact_hits)}  bm25={len(bm25_hits)}  candidates={len(candidates)}")
         for doc, score in exact_hits:
-            print(f"    [EXACT {score:.2f}] {doc['reference']} | {doc.get('name','')[:50]}")
-        for doc, score in qdrant_hits:
-            tag = "QDRANT+EXACT" if doc["reference"] in exact_refs else "QDRANT"
-            print(f"    [{tag} {score:.2f}] {doc['reference']} | {doc.get('name','')[:50]}")
+            print(f"    [EXACT {score:.2f}] {doc['reference']} | {doc.get('name','')[:55]}")
+        for doc, score in bm25_hits:
+            tag = "BM25+EXACT" if doc["reference"] in exact_refs else "BM25"
+            print(f"    [{tag} {score:.2f}] {doc['reference']} | {doc.get('name','')[:55]}")
 
     # ── Phase 2: LLM reranking in batches ────────────────────────────────────
     print("\n" + "=" * 70)
