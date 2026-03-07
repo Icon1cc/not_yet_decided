@@ -14,8 +14,8 @@ The front-end is a chat-style web application built with React, Vite, and Tailwi
 
 ```bash
 cd frontend
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
 The app runs at `http://localhost:5173` by default.
@@ -128,17 +128,19 @@ data/
   target_pool_*.json            # Visible-retailer product pools (Amazon, MediaMarkt)
 
 scrape/
+  run_all_categories_brave.py   # Primary: auto-discover all source categories and scrape each
   scraper_brave.py              # Phase 1a: Brave Search API → product URLs + snippets
-  scraper_playwright.py         # Phase 1b: Playwright → full page JSON extraction
-  parser_raw.py                 # Phase 2: Raw page JSON → structured product records
+  merge_brave_to_matched.py     # Build matched_cyberport/electronic4you from Brave raw outputs
+  scraper_playwright.py         # Optional Phase 1b: Playwright → full page JSON extraction
+  parser_raw.py                 # Optional Phase 2: Raw page JSON → structured product records
   match_targets.py              # Deterministic matching against visible-retailer pool
-  merge_brave_to_matched.py     # Merge Brave-only results into matched output
   build_submission.py           # Format final output for submission
 
 output/
-  raw_*.json                    # Raw Playwright page data (per retailer)
-  matched_*.json                # Parsed, structured product records (per retailer)
-  scraped_*.json                # Brave-only scrape results
+  raw_brave_*.json              # Category-wise Brave discovery output (all hidden retailers)
+  raw_*.json                    # Optional raw Playwright page data (per retailer)
+  matched_*.json                # Final structured product records (per retailer)
+  scraped_*.json                # Legacy Brave-only outputs
 
 retrieval/
   indexing.py                   # Qdrant collection setup + product upsert (dense + BM25)
@@ -153,7 +155,9 @@ constants.py                    # Paths, model names, Qdrant config
 
 ---
 
-## Data Collection
+## Data Collection and Clearance
+
+We invested explicit engineering time in repeated scrape → audit → clean cycles, not one-pass scraping. In practice, we ran category-level collections, inspected false positives and blocked pages, tightened rules (URL validators, model blocklists, dedupe, field guards), and reran with resumable outputs until the matched files contained only usable records.
 
 ### Source data format
 
@@ -174,7 +178,19 @@ Each source product JSON has the following shape:
 }
 ```
 
-`source_products_*.json` files are auto-discovered by the scrapers. Multiple category files (tv_audio, small_appliances, large_appliances) can coexist and are merged before processing.
+`source_products_*.json` files are auto-discovered by the pipeline. Multiple category files (`tv_&_audio`, `small_appliances`, `large_appliances`) are processed category-by-category and then merged at output stage.
+
+### Production pipeline (all categories)
+
+The default production flow is:
+
+1. `run_all_categories_brave.py` auto-discovers all `data/source_products_*.json` files.
+2. Each category is scraped to `output/raw_brave_<category>.json`.
+3. `merge_brave_to_matched.py` merges all raw category files into:
+   - `output/matched_cyberport.json`
+   - `output/matched_electronic4you.json`
+
+This path is used to increase coverage even when direct page extraction is partially blocked.
 
 ### Phase 1a — Brave Search API (`scraper_brave.py`)
 
@@ -201,7 +217,7 @@ Brave Search result metadata (title, description, price snippets, thumbnail) is 
 
 URLs that match category pages, promotional pages, or service pages are excluded before any page visit is attempted.
 
-### Phase 1b — Playwright scraper (`scraper_playwright.py`)
+### Phase 1b — Optional Playwright scraper (`scraper_playwright.py`)
 
 The Playwright scraper builds on the same Brave Search discovery but visits each product URL with a headless Chromium browser (via `playwright-stealth` to reduce bot detection). For each page it extracts:
 
@@ -211,7 +227,7 @@ The Playwright scraper builds on the same Brave Search discovery but visits each
 
 The browser context is configured with an Austrian locale, timezone, and accept-language header to match the expected visitor profile for each site. Rate limiting is applied between Brave API calls (1.2s) and between page visits (2.5s). The scraper is fully resumable: already-visited URLs are tracked by MD5 hash and skipped on re-run.
 
-### Phase 2 — Parsing (`parser_raw.py`)
+### Phase 2 — Optional parsing (`parser_raw.py`)
 
 The parser converts raw page data from Phase 1b into structured product records. For each page entry it runs a series of field extractors in priority order:
 
@@ -226,6 +242,17 @@ The parser converts raw page data from Phase 1b into structured product records.
 **Specifications**: collected from schema.org `additionalProperty` arrays, named containers (`attributes`, `specs`, `technicalDetails`, etc.), plus fallback search metadata (`_search_query`, `_search_rank`, `_search_snippets`). Nothing is filtered — the intent is to preserve as much structured data as possible for downstream matching.
 
 Pages that returned an HTTP error or contain no extractable fields are dropped. All others are written to `matched_*.json`.
+
+### Clearance rules (quality gates)
+
+Before writing final matched records, we apply strict acceptance rules:
+
+- **Domain allowlist per retailer**: records are kept only if URL host matches the retailer domain (`expert.at`, `e-tec.at`, `cyberport.at`, `electronic4you.at`).
+- **Retailer-specific product URL validators**: non-product pages (category, promo, service pages) are excluded.
+- **Hard dedupe**: unique key is `(retailer, url)`; duplicates are removed across category files.
+- **Blocked/empty extraction filtering**: entries with no usable fields or clear block/forbidden responses are dropped.
+- **URL-derived mode for Cloudflare-sensitive outputs** (`matched_cyberport.json`, `matched_electronic4you.json`): name/brand/category are inferred from URL structure only; unverifiable fields remain `null` (`ean`, `price_eur`, `image_url`).
+- **Minimum record validity**: if URL is invalid, source reference is missing, or both inferred name and brand are empty, the row is excluded.
 
 ### Matching against visible retailers (`match_targets.py`)
 
@@ -334,23 +361,33 @@ docker run -p 6333:6333 -p 6334:6334 \
 
 ## Usage
 
-### Scraping hidden retailers
+### Hidden retailers (all categories, primary flow)
 
 ```bash
 cd scrape
 
-# Brave Search only (lightweight, no page visit)
-python3 scraper_brave.py --input "../data/source_products_tv_&_audio.json" \
-                          --output "../output/scraped_tv_audio.json"
+# Full all-category run
+python3 run_all_categories_brave.py
 
-# Brave Search + Playwright (full page extraction)
+# Quick test run (limits sources per category)
+python3 run_all_categories_brave.py --limit 10
+```
+
+This generates category raw files (`output/raw_brave_*.json`) and merged matched files for Cyberport/electronic4you.
+
+### Optional deep extraction for accessible pages
+
+```bash
+cd scrape
+
+# Full page extraction (ld+json, next/hydration blobs)
 python3 scraper_playwright.py
 
-# Parse raw Playwright output into structured records
+# Parse raw page data into matched_*.json
 python3 parser_raw.py
 ```
 
-### Matching visible-retailer pool
+### Matching visible-retailer pools
 
 ```bash
 cd scrape
@@ -359,6 +396,16 @@ python3 match_targets.py \
   --source "../data/source_products_tv_&_audio.json" \
   --pool   "../data/target_pool_tv_&_audio.json" \
   --output "../output/matches_tv_audio.json"
+
+python3 match_targets.py \
+  --source "../data/source_products_small_appliances.json" \
+  --pool   "../data/target_pool_small_appliances.json" \
+  --output "../output/matches_small_appliances.json"
+
+python3 match_targets.py \
+  --source "../data/source_products_large_appliances.json" \
+  --pool   "../data/target_pool_large_appliances.json" \
+  --output "../output/matches_large_appliances.json"
 ```
 
 ### Indexing into Qdrant
@@ -371,12 +418,17 @@ uv run python initialize_db.py
 uv run python initialize_db.py --limit 10 --fresh
 ```
 
-Data files to index are configured in `constants.py`:
+Data files to index are configured in `constants.py` (example):
 
 ```python
 DATA_FILES = [
     "data/target_pool_tv_&_audio.json",
     "data/target_pool_small_appliances.json",
+    "data/target_pool_large_appliances.json",
+    "output/matched_expert.json",
+    "output/matched_etec.json",
+    "output/matched_cyberport.json",
+    "output/matched_electronic4you.json",
 ]
 ```
 
@@ -402,7 +454,6 @@ DATA_FILES = [
 
 ```json
 {
-  "source_reference": "P_C2CA4D4D",
   "reference": "P_SC_A1B2C3D4",
   "retailer": "Expert AT",
   "url": "https://www.expert.at/shop/...",

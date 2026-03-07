@@ -1,0 +1,503 @@
+[
+  {
+    "reference": "P_SC_9074C3D8",
+    "retailer": "Expert AT",
+    "url": "https://expert.at/shop/produkte/haushalt-kueche/kuechenhelfer/vakuumierer/foodsaver-v3840~p427190",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "ROMMELSBACHER",
+    "category": "Haushalt & Küche > Küchenhelfer > Vakuumierer",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "foodsaver v3840"
+    }
+  },
+  {
+    "reference": "P_SC_A1D1BE10",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/frittieren-grillen/barbecue-griller/tefal-gc7128-optigrill~p1746577",
+    "ean": "3016661149559",
+    "name": "Tefal GC7128 OptiGrill+",
+    "brand": "Tefal",
+    "category": "Haushalt & Küche > Frittieren & Grillen > Barbecue & Griller",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA34037/AA34037_01.jpeg",
+    "price_eur": 139.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "3016661149559",
+      "description": "Das gro&szlig;e Plus dieses Tefal Plattengrillers ist die &quot;Automatic Sensor Cooking&quot;-Technologie: Garzeit und -temperatur werden auf Grundlage von 6 Garprogrammen (Burger, Steaks, Sandwiches, W&uuml;rstchen, Fisch, Gefl&uuml;gel) automatisch je nach Dicke und Menge des Grillguts reguliert.&amp;nbsp;Per Lichtindikator wird Ihnen der Garzustand des Fleisches angezeigt.\nIm manuellen Modus k&ouml;nnen vier Temperaturlevel eingestellt werden, um so optimal Obst und Gem&uuml;se grillen zu k&ouml;nnen.\n",
+      "_url_slug_name": "tefal gc7128 optigrill"
+    }
+  },
+  {
+    "reference": "P_SC_F72D706B",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/frittieren-grillen/fritteusen/gastroback-design-heissluft-fritteuse-air-pro-xxl~p2943107",
+    "ean": "4016432425836",
+    "name": "Gastroback Design Heißluft-Fritteuse Air Pro XXL",
+    "brand": "Gastroback",
+    "category": "Haushalt & Küche > Frittieren & Grillen > Fritteusen",
+    "image_url": "https://api.expert.at/produkte/bilder/AA41792_01.jpg",
+    "price_eur": 119.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4016432425836",
+      "description": "Knusprig, saftig, lecker - und das alles ohne Fett! Das ist die Gastroback Design Hei&szlig;luft-Fritteuse Air Pro XXL. Mit dieser vielseitigen Hei&szlig;luft-Fritteuse k&ouml;nnen Sie frittieren, garen, backen, auftauen und d&ouml;rren - ganz ohne &Ouml;l oder Fett. Das spart Kalorien und schont die Umwelt.\n\nDie Gastroback Design Hei&szlig;luft-Fritteuse Air Pro XXL hat ein XXL-F&uuml;llvolumen von 6,5 Litern, in dem Sie ein ganzes H&auml;hnchen oder 1,5 kg Pommes zubereiten k&ouml;nnen. Die 8 voreingestellten Programme machen die Bedienung kinderleicht. Die Temperatur und die Zeit k&ouml;nnen Sie individuell einstellen. Der Korb und das Gitter sind sp&uuml;lmaschinengeeignet.\n\nProdukt-Highlights\n\n\n\tMehr Geschmack, weniger Fett: Frittieren, Garen, Backen, Auftauen und D&ouml;rren ohne Zug",
+      "_url_slug_name": "gastroback design heissluft fritteuse air pro xxl"
+    }
+  },
+  {
+    "reference": "P_SC_9AC46A6E",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/frittieren-grillen/fritteusen/tefal-ey905d-dual-easy-fry-grill~p3013518",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "Tefal",
+    "category": "Haushalt & Küche > Frittieren & Grillen > Fritteusen",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "tefal ey905d dual easy fry grill"
+    }
+  },
+  {
+    "reference": "P_SC_7F00BD31",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/kochen-backen-garen/dampf-reiskocher/gastroback-design-reiskocher~p2740658",
+    "ean": "4016432425072",
+    "name": "Gastroback Design Reiskocher",
+    "brand": "Gastroback",
+    "category": "Haushalt & Küche > Kochen & Backen & Garen > Dampf- & Reiskocher",
+    "image_url": "https://api.expert.at/produkte/bilder/AA39720_01.jpg",
+    "price_eur": 69.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4016432425072",
+      "description": "Automatisches Zubereiten von Reis -&amp;nbsp;kein &Uuml;berkochen, die nat&uuml;rlichen Inhaltsstoffe, Minerale und Vitamine bleiben erhalten.\n",
+      "_url_slug_name": "gastroback design reiskocher"
+    }
+  },
+  {
+    "reference": "P_SC_E7B1ACC5",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/kuechenmaschinen-mixer/handmixer/kenwood-hmp54.000si-chefette~p2249739",
+    "ean": "5011423003955",
+    "name": "Kenwood HMP54.000SI Chefette",
+    "brand": "Kenwood",
+    "category": "Haushalt & Küche > Küchenmaschinen & Mixer > Handmixer",
+    "image_url": "https://api.expert.at/produkte/bilder/AA36793_01.jpg",
+    "price_eur": 99.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "5011423003955",
+      "description": "Die Kenwood Chefette - ein Handmixer mit Sch&uuml;ssel - hat ein elegantes Design und verf&uuml;gt &uuml;ber eine Vielzahl praktischer Funktionen. Perfekt f&uuml;r jene Hobby-K&ouml;che und -B&auml;cker geeignet,&amp;nbsp;die noch keine gr&ouml;&szlig;ere K&uuml;chenmaschine ben&ouml;tigen, aber den Komfort einer kombinierten Sch&uuml;ssel w&uuml;nschen.\n",
+      "_url_slug_name": "kenwood hmp54 000si chefette"
+    }
+  },
+  {
+    "reference": "P_SC_1BF1DBE0",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/kuechenmaschinen-mixer/stabmixer/kitchenaid-5khbrv71bm~p2991397",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "CLATRONIC",
+    "category": "Haushalt & Küche > Küchenmaschinen & Mixer > Stabmixer",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "kitchenaid 5khbrv71bm"
+    }
+  },
+  {
+    "reference": "P_SC_6D9F2E35",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/kuechenmaschinen-mixer/zerkleinerer/kenwood-chp61.000wh-easy-chop~p2351007",
+    "ean": "5011423003559",
+    "name": "Kenwood CHP61.000WH Easy Chop",
+    "brand": "Kenwood",
+    "category": "Haushalt & Küche > Küchenmaschinen & Mixer > Zerkleinerer",
+    "image_url": "https://api.expert.at/produkte/bilder/AA37311_01.jpg",
+    "price_eur": 34.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "5011423003559",
+      "description": "Der kompakte Zerkleinerer hilft einfach und schnell bei der Zubereitung kleiner Mengen an Lebensmittel. Klein aber leistungsstark, ist er mit QuadBlade&trade; System Edelstahlmesser und 2 Geschwindigkeiten ausgestattet. Im Nu bereitet er Dips und Saucen, oder auch eine k&ouml;stliche hausgemachte Salsa sowie Guacamole.\n",
+      "_url_slug_name": "kenwood chp61 000wh easy chop"
+    }
+  },
+  {
+    "reference": "P_SC_613BF82F",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/kuechenmaschinen-mixer/zerkleinerer/kenwood-chp61.100wh-easy-chop~p2350965",
+    "ean": "5011423003542",
+    "name": "Kenwood CHP61.100WH Easy Chop",
+    "brand": "Kenwood",
+    "category": "Haushalt & Küche > Küchenmaschinen & Mixer > Zerkleinerer",
+    "image_url": "https://api.expert.at/produkte/bilder/AA37310_01.jpg",
+    "price_eur": 42.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "5011423003542",
+      "description": "Der kompakte Zerkleinerer hilft einfach und schnell bei der Zubereitung kleiner Mengen an Lebensmittel. Klein aber leistungsstark, ist er mit QuadBlade&trade; System Edelstahlmesser und 2 Geschwindigkeiten ausgestattet. Im Nu bereitet er Dips und Saucen, oder auch eine k&ouml;stliche hausgemachte Salsa sowie Guacamole.\n",
+      "_url_slug_name": "kenwood chp61 100wh easy chop"
+    }
+  },
+  {
+    "reference": "P_SC_BDB599E1",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/toaster-waffeleisen/sandwichtoaster/rommelsbacher-st-1000~p2968199",
+    "ean": "4001797291202",
+    "name": "Rommelsbacher ST 1000",
+    "brand": "Rommelsbacher",
+    "category": "Haushalt & Küche > Toaster & Waffeleisen > Sandwichtoaster",
+    "image_url": "https://api.expert.at/produkte/bilder/AA42103_01.jpg",
+    "price_eur": 54.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4001797291202",
+      "description": "Entdecken Sie den Rommelsbacher ST 1000 Sandwichmaker - Ihr idealer Begleiter f&uuml;r k&ouml;stliche Snacks im XL-Format. Mit seinen massiven Alu-Druckguss Platten sorgt er f&uuml;r eine gleichm&auml;&szlig;ige Br&auml;unung und dank der hochwertigen 2-Lagen Antihaftbeschichtung Xylan&reg; Plus ist die Reinigung ein Kinderspiel. Die gro&szlig;en und extra tiefen Backmulden sind perfekt f&uuml;r American XL Sandwiches und die spezielle Konstruktion mit &Uuml;berlaufschutz versiegelt Ihre Sandwiches rundum. Ob als Snack, Hauptgericht oder s&uuml;&szlig;es Dessert &ndash; die M&ouml;glichkeiten sind grenzenlos.\n\nProdukt-Highlights\n\n\n\tMassive Alu-Druckguss Platten, leicht zu reinigen durch Antihaftbeschichtung\n\tGro&szlig;e Backmulden f&uuml;r American XL Sandwiches (ca. 12&amp;nbsp;x 12&amp;n",
+      "_url_slug_name": "rommelsbacher st 1000"
+    }
+  },
+  {
+    "reference": "P_SC_44666237",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/toaster-waffeleisen/sandwichtoaster/rommelsbacher-st-1800~p2941064",
+    "ean": "4001797291103",
+    "name": "Rommelsbacher ST 1800",
+    "brand": "Rommelsbacher",
+    "category": "Haushalt & Küche > Toaster & Waffeleisen > Sandwichtoaster",
+    "image_url": "https://api.expert.at/produkte/bilder/AA41775_01.jpg",
+    "price_eur": 74.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4001797291103",
+      "description": "Mit dem Rommelsbacher ST 1800 Sandwichmaker k&ouml;nnen Sie bis zu vier American XL Sandwiches (ca. 12,5 x 12,5 cm) gleichzeitig zubereiten. Die massiven Alu-Druckguss Platten mit Backmulden und Trennsteg sorgen f&uuml;r eine optimale Hitzeverteilung und eine leichte Reinigung durch die hochwertige 2-Lagen Antihaftbeschichtung.\n\nDer Sandwichmaker ist leistungsstark und schnell einsatzbereit. Sie k&ouml;nnen die Backzeit individuell einstellen, dank der Soft-Touch Tasten, dem LED-Display und der 15 Minuten Zeitschaltuhr. Au&szlig;erdem verf&uuml;gt der Sandwichmaker &uuml;ber eine automatische Abschaltung, eine Nachbr&auml;un-Funktion und ein Cool-Touch Geh&auml;use mit w&auml;rmeisoliertem Handgriff.\n\nProdukt-Highlights\n\n\n\tMassive Alu-Druckguss Platten, leicht zu reinigen durch Antihaftbes",
+      "_url_slug_name": "rommelsbacher st 1800"
+    }
+  },
+  {
+    "reference": "P_SC_BB2BFC98",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/toaster-waffeleisen/toaster/wmf-bueno-pro-doppel-langschlitz-toaster~p1605691",
+    "ean": "4211129138628",
+    "name": "WMF BUENO Pro Doppel-Langschlitz Toaster",
+    "brand": "WMF",
+    "category": "Haushalt & Küche > Toaster & Waffeleisen > Toaster",
+    "image_url": "https://api.expert.at/produkte/bilder/AA33082_01.jpg",
+    "price_eur": 84.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4211129138628",
+      "description": "Toast oder Brot zum Fr&uuml;hst&uuml;ck? Oder am besten beides? Vorlieben und Geschm&auml;cker f&uuml;r Getoastetes sind individuell. Da kommt der WMF Bueno Pro Doppel-Langschlitz Toaster genau richtig. Denn er begeistert nicht nur dank Cromargan matt mit seinem edlen Look, sondern auch mit seinen 6 variabel einstellbaren Br&auml;unungsstufen und 2 Langschlitzen.&amp;nbsp;\n",
+      "_url_slug_name": "wmf bueno pro doppel langschlitz toaster"
+    }
+  },
+  {
+    "reference": "P_SC_549D246C",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/toaster-waffeleisen/toaster/wmf-kuechenminis-1-scheiben-toaster~p462545",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "WMF",
+    "category": "Haushalt & Küche > Toaster & Waffeleisen > Toaster",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "wmf kuechenminis 1 scheiben toaster"
+    }
+  },
+  {
+    "reference": "P_SC_D9BCFAE6",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/toaster-waffeleisen/toaster/wmf-kuechenminis-langschlitz-toaster-edelstahl~p1605760",
+    "ean": "4211129130806",
+    "name": "WMF KÜCHENminis Langschlitz-Toaster edelstahl",
+    "brand": "WMF",
+    "category": "Haushalt & Küche > Toaster & Waffeleisen > Toaster",
+    "image_url": "https://api.expert.at/produkte/bilder/AA33091_01.jpg",
+    "price_eur": 84.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4211129130806",
+      "description": "Das kleine edelstahl-farbene Raumwunder f&uuml;r XXL-Toasts, Bagels, lange Brotscheiben und Br&ouml;tchen.&amp;nbsp;Mit dem mitgelieferten Aufsatz lassen sich Br&ouml;tchen auftauen, aufbacken oder schonend aufw&auml;rmen.&amp;nbsp;\n",
+      "_url_slug_name": "wmf kuechenminis langschlitz toaster edelstahl"
+    }
+  },
+  {
+    "reference": "P_SC_ABFB57F2",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/haushalt-kueche/toaster-waffeleisen/toaster/wmf-lono-toaster~p462553",
+    "ean": "4211129063401",
+    "name": "WMF LONO Toaster",
+    "brand": "WMF",
+    "category": "Haushalt & Küche > Toaster & Waffeleisen > Toaster",
+    "image_url": "https://api.expert.at/produkte/bilder/aa23445_01.jpg",
+    "price_eur": 74.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4211129063401",
+      "_url_slug_name": "wmf lono toaster"
+    }
+  },
+  {
+    "reference": "P_SC_79DAE4D6",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/kaffee-espresso/kaffeemuehlen/gastroback-design-kaffeemuehle-basic~p2130460",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "GASTROBACK",
+    "category": "Kaffee & Espresso > Kaffeemühlen",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "gastroback design kaffeemuehle basic"
+    }
+  },
+  {
+    "reference": "P_SC_938E1B28",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/kaffee-espresso/siebtraegermaschinen/gastroback-design-espresso-piccolo-pro~p2949749",
+    "ean": "4016432427212",
+    "name": "Gastroback Design Espresso Piccolo Pro",
+    "brand": "Gastroback",
+    "category": "Kaffee & Espresso > Siebträgermaschinen",
+    "image_url": "https://api.expert.at/produkte/bilder/AA41819_01.jpg",
+    "price_eur": 179.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4016432427212",
+      "description": "Produkt-Highlights\n\n\n\tSiebtr&auml;ger Espressomaschine f&uuml;r alle Kaffeespezialit&auml;ten\n\tSehr schmales Design f&uuml;r jede K&uuml;che &ndash; nur 15&thinsp;cm breit\n\tAuch f&uuml;r E.S.E.&thinsp;Pads geeignet, praktisch und umweltvertr&auml;glich\n\n",
+      "_url_slug_name": "gastroback design espresso piccolo pro"
+    }
+  },
+  {
+    "reference": "P_SC_127A816B",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/kaffee-espresso/siebtraegermaschinen/gastroback-espresso-barista-pro~p1827575",
+    "ean": "4016432426161",
+    "name": "Gastroback Espresso Barista Pro",
+    "brand": "Gastroback",
+    "category": "Kaffee & Espresso > Siebträgermaschinen",
+    "image_url": "https://api.expert.at/produkte/bilder/AA34507_01.jpg",
+    "price_eur": 369.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4016432426161",
+      "description": "Mit der Gastroback Design Barista Pro k&ouml;nnen Sie wahlweise Ihren Kaffee&amp;nbsp;direkt aus der frisch gemahlenen Bohne genie&szlig;en oder auch mit vorgemahlenem Kaffeepulver.&amp;nbsp;Diese&amp;nbsp; vorprogrammierbare Siebtr&auml;germaschine vereint alles, was sich ein Kaffeegenie&szlig;er w&uuml;nscht: Kaffeem&uuml;hle, Espresso-Siebtr&auml;ger und Milchaufsch&auml;umer.\n",
+      "_url_slug_name": "gastroback espresso barista pro"
+    }
+  },
+  {
+    "reference": "P_SC_CE1A79F4",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/koerperpflege-wellness/massage-entspannung/manikuere-pedikuere/beurer-filzkegel-fuer-mp60~p663472",
+    "ean": "4211125162375",
+    "name": "Beurer Filzkegel für MP60",
+    "brand": "Beurer",
+    "category": "Körperpflege & Wellness > Massage & Entspannung > Maniküre & Pediküre",
+    "image_url": "https://api.expert.at/produkte/bilder/aa25901_01.jpg",
+    "price_eur": 5.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4211125162375",
+      "_url_slug_name": "beurer filzkegel fuer mp60"
+    }
+  },
+  {
+    "reference": "P_SC_E1AAF271",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/koerperpflege-wellness/massage-entspannung/massagegeraete/beurer-mg79-massage-gun-sensitive~p3038862",
+    "ean": "4211125103309",
+    "name": "Beurer MG79 Massage Gun Sensitive",
+    "brand": "Beurer",
+    "category": "Körperpflege & Wellness > Massage & Entspannung > Massagegeräte",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA43115/AA43115_01.jpeg",
+    "price_eur": 49.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4211125103309",
+      "description": "Mit dieser Akku-Massagepistole von Beurer k&ouml;nnen gezielt Verspannungen durch kraftvolle und wohltuende Triggerpunktmassage gelockert werden. Dabei &uuml;berzeugt diese Massage-Gun durch Leichtigkeit und einer ergonomischen Form f&uuml;r eine komfortable Behandlung.\n",
+      "_url_slug_name": "beurer mg79 massage gun sensitive"
+    }
+  },
+  {
+    "reference": "P_SC_4DD7DF00",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/koerperpflege-wellness/massage-entspannung/massagegeraete/beurer-mg99-mini-massage-gun~p2397744",
+    "ean": "4211125650032",
+    "name": "Beurer MG99 Mini Massage Gun",
+    "brand": "Beurer",
+    "category": "Körperpflege & Wellness > Massage & Entspannung > Massagegeräte",
+    "image_url": "https://api.expert.at/produkte/bilder/AA37461_01.jpg",
+    "price_eur": 74.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "4211125650032",
+      "description": "Mit dieser Akku-Massagepistole von Beurer k&ouml;nnen gezielt Verspannungen durch kraftvolle und wohltuende Triggerpunktmassage gelockert werden. Dabei &uuml;berzeugt diese Massage-Gun durch Leichtigkeit und einer ergonomischen Form f&uuml;r eine komfortable Behandlung.\n",
+      "_url_slug_name": "beurer mg99 mini massage gun"
+    }
+  },
+  {
+    "reference": "P_SC_CA2314A8",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/reinigung-pflege/buegeln/buegeleisen/tefal-fv9852-ultimate-pure~p3367462",
+    "ean": "3121040095737",
+    "name": "Tefal FV9852 Ultimate Pure",
+    "brand": "Tefal",
+    "category": "Reinigung & Pflege > Bügeln > Bügeleisen",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA46115/AA46115_01.jpeg",
+    "price_eur": 169.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "3121040095737",
+      "description": "Das Tefal Ultimate Pure Dampfb&uuml;geleisen wurde entwickelt, um jede Herausforderung bei der Kleidungspflege m&uuml;helos zu meistern. Es bietet eine starke Leistung und verf&uuml;gt &uuml;ber eine Autoclean-Sohle f&uuml;r m&uuml;helose Wartung. Die Leistung von 3200 W sorgt f&uuml;r ein schnelles Aufheizen, mit einer variablen Dampfmenge von 60 g/min und einem starken Dampfsto&szlig; von 300 g/min, um selbst die hartn&auml;ckigsten Falten zu bew&auml;ltigen.\n\nProdukt-Highlights:\n\n\n\tLeistungsstarkes Dampfb&uuml;geleisen\n\tEin schnell aufheizendes 3200 W Dampfb&uuml;geleisen mit einer kontinuierlichen Dampfabgabe von 60 g/min und einem Dampfsto&szlig; von 300 g/min gegen hartn&auml;ckige Falten.\n\tAutoClean B&uuml;gelsohle\n\tDie AutoClean B&uuml;gelsohle verhindert die Bildung von R&uuml;cks",
+      "_url_slug_name": "tefal fv9852 ultimate pure"
+    }
+  },
+  {
+    "reference": "P_SC_F23D3E9E",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/reinigung-pflege/buegeln/dampfbuegelstationen/tefal-gv9230-pro-express-protect~p2830408",
+    "ean": "3121040077252",
+    "name": "Tefal GV9230 Pro Express Protect",
+    "brand": "Tefal",
+    "category": "Reinigung & Pflege > Bügeln > Dampfbügelstationen",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA40693/AA40693_01.jpeg",
+    "price_eur": 229.99,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "3121040077252",
+      "description": "Produkt-Highlights\n\n\n\t\n\tBesonders leistungsstark, 100% schonendes B&uuml;geln aller Textilien\n\tDie Pro Express Protect Hochdruck Dampfb&uuml;gelstation bearbeitet Ihre Kleidung mit besonders kraftvollem Dampf und &uuml;berzeugt mit erstklassigen Ergebnissen.\n\t\n\t\n\tDie Hochdruck Boilertechnologie bietet Effizienz auf professionellem Niveau, w&auml;hrend ein exklusives doppeltes Schutzsystem daf&uuml;r sorgt, dass Ihre Kleidung stets optimal aussieht.\n\t\n\t\n\tSie m&uuml;ssen dar&uuml;ber hinaus keine Verbrennung Ihrer b&uuml;gelbaren Textilien f&uuml;rchten, da Sie sich um keinerlei Einstellungen k&uuml;mmern m&uuml;ssen.\n\t\n\t\n\tSchnellaufheizend -&amp;nbsp;betriebsbereit in 2 Minuten.\n\t\n\n",
+      "_url_slug_name": "tefal gv9230 pro express protect"
+    }
+  },
+  {
+    "reference": "P_SC_C4455FA1",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/lg-32lq63006~p2404094",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "LG",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "lg 32lq63006"
+    }
+  },
+  {
+    "reference": "P_SC_C84BF02B",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/lg-32lr60006la~p3175143",
+    "ean": "8806096143322",
+    "name": "LG 32LR60006LA",
+    "brand": "LG",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA44041/AA44041_01.jpeg",
+    "price_eur": 259.0,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "8806096143322",
+      "description": "Klein aber Oho! Der LG 32LR60006 &uuml;berzeugt mit seiner Full-HD-Aufl&ouml;sung und seinen smarten Funktionen.\n",
+      "_url_slug_name": "lg 32lr60006la"
+    }
+  },
+  {
+    "reference": "P_SC_DB43DBF7",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/samsung-55q64t~p1624415",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "Samsung",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "samsung 55q64t"
+    }
+  },
+  {
+    "reference": "P_SC_1B3CB7C9",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/samsung-65ls03fw-the-frame-pro~p3223131",
+    "ean": "8806097108535",
+    "name": "Samsung 65LS03FW \"The Frame Pro\"",
+    "brand": "Samsung",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA44650/AA44650_01.jpeg",
+    "price_eur": 1699.0,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "8806097108535",
+      "description": "Ihre&amp;nbsp;Kunstgalerie am TV mit dem Lifestyle TV The Frame von Samsung\n\nNQ4 AI Gen3 Processor &amp;amp; 4K AI Upscaling:&amp;nbsp;Der AI-basierte 4K-Prozessor sorgt f&uuml;r ein beeindruckendes 4K-Erlebnis. Dank der 4K AI Upscaling Technologie, die auf 20&amp;nbsp;neuronalen Netzwerken basiert, wandelt er Inhalte in brillante 4K-Bildqualit&auml;t um. Der Prozessor optimiert sowohl das Bild als auch den Sound, um ein erstklassiges 4K-Erlebnis zu liefern &ndash; egal ob Sie&amp;nbsp;Streaming-Dienste nutzen&amp;nbsp;oder Live-Sport schauen. Erleben Sie Ihre&amp;nbsp;Lieblingsinhalte dank 4K Upscaling in einer Aufl&ouml;sung von bis zu 4K.\n\nMattes Display:&amp;nbsp;Dank des matten Displays st&ouml;ren Sie&amp;nbsp;weder die Mittagssonne noch Lampenreflexionen beim Filmeschauen. Durch die",
+      "_url_slug_name": "samsung 65ls03fw the frame pro"
+    }
+  },
+  {
+    "reference": "P_SC_19298625",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/samsung-65q67d~p2986259",
+    "ean": "8806095514093",
+    "name": "Samsung 65Q67D",
+    "brand": "Samsung",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA42343/AA42347_01.jpeg",
+    "price_eur": 949.0,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "8806095514093",
+      "description": "Tauchen Sie ein in ein fesselndes Seherlebnis mit dem Samsung 65Q67D. Mit seiner atemberaubenden 4K-Aufl&ouml;sung und der lebendigen Farbgebung erweckt dieser Smart-TV Ihre Lieblingsinhalte zum Leben. Dank der Quantum Dot-Technologie genie&szlig;en Sie eine beeindruckende Bildqualit&auml;t mit satten Kontrasten und einer unglaublichen Detailgenauigkeit. Mit dem schlanken und eleganten Design f&uuml;gt sich der 65-Zoll-Bildschirm nahtlos in jedes Wohnzimmer ein und wird zum Blickfang. Erleben Sie Unterhaltung auf einem neuen Level &ndash; mit dem Samsung 65Q67D.\n\nProdukt-Highlights\n\n\n\tQuantum HDR: Quantum HDR bringt Details und Kontraste zur Geltung und l&auml;sst Sie die Kraft der Bilder sp&uuml;ren. Die dynamische Farbdarstellung von HDR10+ begeistert und &uuml;berzeugt mit tieferen Schw",
+      "_url_slug_name": "samsung 65q67d"
+    }
+  },
+  {
+    "reference": "P_SC_AA4EC94C",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/samsung-65qn900d~p2986230",
+    "ean": "8806095504339",
+    "name": "Samsung 65QN900D",
+    "brand": "Samsung",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA42313/AA42315_01.jpeg",
+    "price_eur": 5699.0,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "8806095504339",
+      "description": "Erleben Sie die Zukunft des Fernsehens mit dem Samsung 65&quot; Neo QLED 8K TV aus der QN900D-Serie und genie&szlig;en Sie beeindruckende Bilder in 8K-Qualit&auml;t!&amp;nbsp;\n\nProdukt-Highlights\n\n\n\tNeo Quantum HDR 8K Pro: Mit 8K erleben Sie ein ultimativ klares Bild, das seine Kraft aus 33 Millionen Pixeln zieht. Das sind viermal mehr als bei 4K. Neo Quantum HDR 8K Pro hebt Ihr Seherlebnis auf ein ganz neues Niveau. Lassen Sie sich von dem faszinierenden Zusammenspiel von 8K-Aufl&ouml;sung, realit&auml;tsnahen Farben und ultrapr&auml;zisen Kontrasten begeistern und genie&szlig;en Sie ein Bild von enormer Lebendigkeit.&amp;nbsp;\n\tMotion Xcelerator 240 Hz: Mit bis zu 240 Hz in 4K sorgt der Motion Xcelerator 240 Hz f&uuml;r gleichbleibend gestochen scharfe Bilder bei noch so schneller Action",
+      "_url_slug_name": "samsung 65qn900d"
+    }
+  },
+  {
+    "reference": "P_SC_BC284AD3",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/samsung-65qn93d~p2986236",
+    "ean": "8806095502861",
+    "name": "Samsung 65QN93D",
+    "brand": "Samsung",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": "https://api.expert.at/produkte/prodanet/AA42319/AA42322_01.jpeg",
+    "price_eur": 1799.0,
+    "specifications": {
+      "itemCondition": "https://schema.org/NewCondition",
+      "gtin13": "8806095502861",
+      "description": "Erleben Sie mit dem Samsung 65&quot; NeoQLED-TV der Serie QN93D ein beeindruckend lebendiges Farberlebnis mit einem hohen Dynamikumfang.\n\nProdukt-Highlights\n\n\n\tNeo Quantum HDR+1: Lebendige Farben mit einem hohen Dynamikumfang. Zudem kann die Technologie dein Sehvergn&uuml;gen durch eine hervorragende Helligkeit in Kombination mit dynamisch adaptiven Szenen in 4K-Aufl&ouml;sung steigern.\n\tMotion Xcelerator 144 Hz: Mit bis zu 144 Hz in 4K sorgt Motion Xcelerator 144 Hz f&uuml;r gleichbleibend gestochen scharfe Bilder bei noch so schneller Action.\n\tNQ4 AI Gen2 Prozessor: Der 4K AI-Prozessor bietet Ihnen ein gro&szlig;artiges Seherlebnis in 4K. Erm&ouml;glicht wird das durch die Technologie 4K AI Upscaling, die von 20 neuronalen AI-Netzwerken unterst&uuml;tzt wird. Sie rechnet Ihre Inhalte in ",
+      "_url_slug_name": "samsung 65qn93d"
+    }
+  },
+  {
+    "reference": "P_SC_673BACD2",
+    "retailer": "Expert AT",
+    "url": "https://www.expert.at/shop/tv-audio-video/fernseher/samsung-65qn95b~p2442135",
+    "ean": null,
+    "name": "EXPERT Elektrofachhandel",
+    "brand": "Samsung",
+    "category": "TV, Audio & Video > Fernseher",
+    "image_url": null,
+    "price_eur": null,
+    "specifications": {
+      "_url_slug_name": "samsung 65qn95b"
+    }
+  }
+]

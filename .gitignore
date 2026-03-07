@@ -1,4 +1,16 @@
+# Secrets / local environment files
 .env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 qdrant_storage/
 __pycache__/
 frontend/node_modules/
+.DS_Store
+*.log
+*.pyc
+*.pyo
+*.pyd
+*.swp

@@ -148,7 +148,6 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
 
     for src in items:
         src_ref = src.get("source_reference")
-        src_name = src.get("source_name")
         query_ean = valid_ean(src.get("query_ean"))
         query_model = src.get("query_model")
         if not src_ref:
@@ -165,7 +164,9 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
             if not host_allowed(url, retailer):
                 continue
 
-            dedupe_key = (str(src_ref), url)
+            # Final matched files are product pools (not per-source maps),
+            # so dedupe by retailer+url across all source references.
+            dedupe_key = (retailer, url)
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
@@ -188,7 +189,6 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
                 specs["source_query_ean"] = query_ean
 
             record = {
-                "source_reference": src_ref,
                 "reference": hit.get("reference") or make_ref(url),
                 "retailer": retailer,
                 "url": url,
@@ -205,7 +205,6 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
     for retailer in by_retailer:
         by_retailer[retailer].sort(
             key=lambda x: (
-                x.get("source_reference") or "",
                 x.get("retailer") or "",
                 x.get("name") or "",
                 x.get("url") or "",

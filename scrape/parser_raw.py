@@ -8,7 +8,7 @@ For every scraped page entry:
   - Extracts every field it can find without filtering or omitting anything
   - Maps result to the exact source-product field names:
       ean, name, brand, category, image_url, price_eur, reference, specifications
-  - Adds: source_reference, url, retailer
+  - Adds: url, retailer
 
 Output (../output/):
   matched_expert.json
@@ -634,7 +634,6 @@ def parse_file(raw_path: Path, out_path: Path):
         url = entry.get("url", "")
 
         product = {
-            "source_reference": entry.get("source_reference"),
             "reference":        entry.get("reference") or make_ref(url),
             "retailer":         entry.get("retailer"),
             "url":              url,
