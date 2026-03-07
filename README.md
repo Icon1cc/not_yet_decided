@@ -70,11 +70,10 @@ User uploads source_products.json  or  types a query
 Session created, query sent to backend
         │
         ▼
-Backend: exact identifier match (EAN / GTIN / name)
+Backend: Qdrant payload prefiltering + exact identifier match (EAN / GTIN / name, additional enrichment fields (product_type, size...))
         │
         ▼
-Backend: Qdrant hybrid retrieval (BM25 sparse + dense, RRF fusion)
-        │
+Backend: Qdrant BM25 sparse
         ▼
 Backend: LLM match / no-match filter (Claude Sonnet, batched)
         │
