@@ -1,0 +1,40 @@
+data:
+  source: data/source_products_tv_&_audio.json
+
+subset:
+  n: null  # number of source products to test on; set to null for all
+
+exact_match:
+  # min cumulative weight to include a candidate as a match
+  threshold: 0.5
+  columns:
+    - source_field: ean
+      target_field: ean
+      weight: 1.0
+    - source_field: specifications.GTIN
+      target_field: specifications.GTIN
+      weight: 1.0
+    - source_field: name
+      target_field: name
+      weight: 0.4
+    - source_field: price_eur
+      target_field: price_eur
+      weight: 0.2
+
+qdrant:
+  url: "http://localhost:6333"
+  collection: "products"
+  embedding_model: "openai/text-embedding-3-small"
+  embedding_dim: 1536
+  top_k: 20
+  min_score: 0.3
+  category_filter: "TV & Audio"  # null = no filter; must match product["category"] exactly
+
+llm:
+  model: anthropic/claude-sonnet-4-5
+  batch_size: 8
+  max_candidates: 15  # cap candidates sent to LLM (top by score)
+
+output:
+  dir: output
+  run_name: qdrant_hybrid_llm
