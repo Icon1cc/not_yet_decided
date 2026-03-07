@@ -23,6 +23,7 @@ Usage (run from inside scrape/):
 import hashlib
 import json
 import re
+import urllib.parse
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -101,6 +102,125 @@ def all_sources(raw: dict) -> list:
             blobs.append(d)
     return blobs
 
+
+# ── Fallback helpers for Cloudflare/403 pages ─────────────────────────────────
+
+_RETAILER_SUFFIX = re.compile(
+    r"\s*[|\-]\s*(electronic4you|mediamarkt|expert\.at|cyberport|e-tec|amazon).*$",
+    re.IGNORECASE,
+)
+_BLOCKED_TITLE = re.compile(
+    r"access denied|attention required|forbidden|just a moment|cloudflare|captcha|verify",
+    re.IGNORECASE,
+)
+_URL_HTML_EXT = re.compile(r"\.(?:html?|php)$", re.IGNORECASE)
+_URL_TRAILING_ID = re.compile(r"-\d{5,7}(?:-l\d+)?$", re.IGNORECASE)
+_URL_EXPERT_ID = re.compile(r"~p\d+$", re.IGNORECASE)
+_PRICE_FROM_TEXT = [
+    re.compile(r"(\d{1,3}(?:\.\d{3})+,\d{2})\s*[€EUR]", re.IGNORECASE),
+    re.compile(r"(\d{1,4},\d{2})\s*[€EUR]", re.IGNORECASE),
+    re.compile(r"[€EUR]\s*(\d{1,4}(?:[.,]\d{1,2})?)", re.IGNORECASE),
+]
+
+
+def search_blob(raw: dict) -> dict:
+    val = raw.get("search_result")
+    return val if isinstance(val, dict) else {}
+
+
+def clean_title(text: str | None) -> str | None:
+    if not isinstance(text, str):
+        return None
+    out = _RETAILER_SUFFIX.sub("", text).strip(" -|\t")
+    if not out or _BLOCKED_TITLE.search(out):
+        return None
+    return out
+
+
+def coerce_price(value) -> float | None:
+    if value is None:
+        return None
+    raw_str = str(value).replace("\xa0", "").replace("€", "").replace("EUR", "").strip()
+    raw_str = re.sub(r"\.(?=\d{3})", "", raw_str)
+    raw_str = raw_str.replace(",", ".")
+    try:
+        p = float(raw_str)
+        if 0.5 < p < 50_000:
+            return round(p, 2)
+    except (ValueError, TypeError):
+        return None
+    return None
+
+
+def price_from_text(text: str | None) -> float | None:
+    if not isinstance(text, str) or not text.strip():
+        return None
+    for pat in _PRICE_FROM_TEXT:
+        m = pat.search(text)
+        if not m:
+            continue
+        p = coerce_price(m.group(1))
+        if p is not None:
+            return p
+    return None
+
+
+def first_brand_token(text: str | None) -> str | None:
+    if not isinstance(text, str) or not text.strip():
+        return None
+    tok = re.split(r"\s+", text.strip())[0]
+    tok = re.sub(r"[^A-Za-z0-9&+.\-]", "", tok)
+    if len(tok) < 2 or not re.search(r"[A-Za-z]", tok):
+        return None
+    if tok.lower() in {"www", "http", "https", "de", "at"}:
+        return None
+    return tok
+
+
+def source_brand(raw: dict) -> str | None:
+    b = raw.get("source_brand")
+    if isinstance(b, str) and b.strip():
+        return b.strip()
+    return first_brand_token(raw.get("source_name"))
+
+
+def name_from_url(url: str) -> str | None:
+    if not isinstance(url, str) or not url.strip():
+        return None
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return None
+
+    parts = [p for p in parsed.path.split("/") if p]
+    if not parts:
+        return None
+
+    last = urllib.parse.unquote(parts[-1]).strip()
+    if not last:
+        return None
+
+    # e-tec details.php links encode only an article number in query params.
+    if last.lower().startswith("details.php"):
+        params = urllib.parse.parse_qs(parsed.query)
+        art = (params.get("artnr") or params.get("art") or [None])[0]
+        if isinstance(art, str):
+            art = art.strip().strip("+").strip()
+            if art:
+                return f"product {art}"
+        return None
+
+    slug = _URL_HTML_EXT.sub("", last)
+    slug = _URL_EXPERT_ID.sub("", slug)
+    slug = _URL_TRAILING_ID.sub("", slug)
+    slug = slug.replace("_", "-")
+    slug = re.sub(r"[^A-Za-z0-9\-]+", " ", slug)
+    slug = re.sub(r"-+", " ", slug)
+    slug = re.sub(r"\s+", " ", slug).strip()
+    if len(slug) < 3:
+        return None
+    return slug
+
 # ── ld+json normaliser ────────────────────────────────────────────────────────
 
 def flatten_ld(blocks) -> list:
@@ -153,7 +273,15 @@ def extract_name(raw: dict) -> str | None:
         if isinstance(v, str) and len(v.strip()) > 1:
             return v.strip()
 
-    return (raw.get("page_title") or "").strip() or None
+    page_title = clean_title(raw.get("page_title"))
+    if page_title:
+        return page_title
+
+    search_title = clean_title(search_blob(raw).get("title"))
+    if search_title:
+        return search_title
+
+    return name_from_url(raw.get("url", ""))
 
 
 def extract_brand(raw: dict) -> str | None:
@@ -178,6 +306,14 @@ def extract_brand(raw: dict) -> str | None:
             if isinstance(n, str) and n.strip():
                 return n.strip()
 
+    for candidate in (
+        source_brand(raw),
+        first_brand_token(clean_title(search_blob(raw).get("title"))),
+        first_brand_token(name_from_url(raw.get("url", ""))),
+    ):
+        if candidate:
+            return candidate
+
     return None
 
 
@@ -192,12 +328,9 @@ def extract_price(raw: dict) -> float | None:
             for key in ("price", "lowPrice", "highPrice"):
                 val = offers.get(key)
                 if val is not None:
-                    try:
-                        p = float(str(val).replace(",", "."))
-                        if 0.5 < p < 50_000:
-                            return round(p, 2)
-                    except (ValueError, TypeError):
-                        pass
+                    p = coerce_price(val)
+                    if p is not None:
+                        return p
 
     # 2. Deep search across all sources
     blobs = all_sources(raw)
@@ -207,16 +340,18 @@ def extract_price(raw: dict) -> float | None:
                      "finalPrice", "offerPrice", "preis", "verkaufspreis",
                      "listPrice", "netPrice", "grossPrice")
         if v is not None:
-            raw_str = str(v).replace("\xa0", "").replace("€", "").replace("EUR", "").strip()
-            # Handle "99,99" and "99.99" and "1.299,99"
-            raw_str = re.sub(r"\.(?=\d{3})", "", raw_str)  # remove thousands separator
-            raw_str = raw_str.replace(",", ".")
-            try:
-                p = float(raw_str)
-                if 0.5 < p < 50_000:
-                    return round(p, 2)
-            except (ValueError, TypeError):
-                pass
+            p = coerce_price(v)
+            if p is not None:
+                return p
+
+    # 3. Search snippets fallback (works even when page itself is blocked)
+    search = search_blob(raw)
+    search_text = [search.get("description"), search.get("title")]
+    search_text.extend(search.get("extra_snippets") or [])
+    for text in search_text:
+        p = price_from_text(text)
+        if p is not None:
+            return p
 
     return None
 
@@ -296,6 +431,13 @@ def extract_image_url(raw: dict) -> str | None:
                     if r:
                         return r
 
+    # 3. Search result thumbnail fallback
+    search = search_blob(raw)
+    for key in ("thumbnail", "image", "image_url"):
+        r = valid_url(search.get(key))
+        if r:
+            return r
+
     return None
 
 
@@ -336,6 +478,18 @@ def extract_category(raw: dict) -> str | None:
                 n = last.get("name") or last.get("item") or last.get("title")
                 if n and isinstance(n, str):
                     return n.strip()
+
+    # URL path fallback for retailer category-like segments
+    url = raw.get("url", "")
+    try:
+        parts = [p for p in urllib.parse.urlparse(url).path.split("/") if p]
+    except ValueError:
+        parts = []
+    if len(parts) >= 2:
+        # Ignore trailing product slug and internal route markers.
+        candidates = [p for p in parts[:-1] if p not in {"pdp", "shop", "produkt"}]
+        if candidates:
+            return " > ".join(p.replace("-", " ").strip() for p in candidates[:3])
 
     return None
 
@@ -427,6 +581,30 @@ def extract_specifications(raw: dict) -> dict | None:
                 if v not in (None, "", [], {}):
                     specs[field] = v
 
+    # ── Fallback metadata from search/source/url ──────────────────────────
+    search = search_blob(raw)
+    if search:
+        if search.get("query"):
+            specs.setdefault("_search_query", search["query"])
+        if search.get("rank") is not None:
+            specs.setdefault("_search_rank", search["rank"])
+        if search.get("description"):
+            specs.setdefault("_search_description", str(search["description"])[:500])
+        snippets = search.get("extra_snippets") or []
+        if snippets:
+            joined = " | ".join(str(s) for s in snippets if s)
+            if joined:
+                specs.setdefault("_search_snippets", joined[:700])
+
+    for field in ("source_brand", "source_ean", "source_model"):
+        value = raw.get(field)
+        if value not in (None, "", [], {}):
+            specs.setdefault(field, value)
+
+    url_name = name_from_url(raw.get("url", ""))
+    if url_name:
+        specs.setdefault("_url_slug_name", url_name)
+
     return specs if specs else None
 
 
@@ -449,10 +627,10 @@ def parse_file(raw_path: Path, out_path: Path):
     print(f"  {raw_path.name}: {len(entries)} raw entries")
 
     matched = []
-    skipped = 0
+    dropped_errors = 0
+    dropped_empty = 0
 
     for entry in entries:
-        # Keep entries with errors in the output but mark them
         url = entry.get("url", "")
 
         product = {
@@ -469,10 +647,21 @@ def parse_file(raw_path: Path, out_path: Path):
             "specifications":   extract_specifications(entry),
         }
 
-        # If the page had an error, attach it for transparency
         if entry.get("error"):
-            product["_scrape_error"] = entry["error"]
-            skipped += 1
+            dropped_errors += 1
+            continue
+
+        has_useful_data = any([
+            product["ean"],
+            product["name"],
+            product["brand"],
+            product["image_url"],
+            product["specifications"],
+            product["price_eur"] is not None,
+        ])
+        if not has_useful_data:
+            dropped_empty += 1
+            continue
 
         matched.append(product)
 
@@ -480,8 +669,11 @@ def parse_file(raw_path: Path, out_path: Path):
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(matched, f, ensure_ascii=False, indent=2)
 
-    ok = len(matched) - skipped
-    print(f"  -> {out_path.name}: {len(matched)} entries ({ok} ok, {skipped} with errors)")
+    dropped_total = dropped_errors + dropped_empty
+    print(
+        f"  -> {out_path.name}: {len(matched)} kept, "
+        f"{dropped_total} dropped ({dropped_errors} errors, {dropped_empty} empty)"
+    )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

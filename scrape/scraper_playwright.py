@@ -64,6 +64,8 @@ BRAVE_RATE        = 1.2     # seconds between Brave API calls
 PAGE_DELAY        = 2.5     # seconds between Playwright page visits
 PAGE_TIMEOUT      = 30_000  # ms
 RESULTS_PER_QUERY = 10
+MAX_QUERIES_PER_RETAILER = 3
+TARGET_URLS_PER_RETAILER = 12
 
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 
@@ -166,6 +168,44 @@ def build_query(src: dict, site: str) -> str:
         term = " ".join([brand] + meaningful).strip()
     return f"site:{site} {term}"
 
+
+def build_queries(src: dict, site: str) -> list[str]:
+    """Generate multiple search variants to improve coverage."""
+    name = (src.get("name") or "").strip()
+    brand = (src.get("brand") or "").strip()
+    if not brand and name:
+        brand = name.split()[0]
+
+    ean = get_ean(src)
+    model = get_model(src)
+    cleaned_name = clean_name(name)
+
+    queries: list[str] = []
+    if ean:
+        queries.append(f"site:{site} {ean}")
+    if model:
+        bm = f"{brand} {model}".strip()
+        if bm:
+            queries.append(f"site:{site} {bm}")
+        queries.append(f'site:{site} "{model}"')
+    if cleaned_name:
+        queries.append(f'site:{site} "{cleaned_name}"')
+    queries.append(build_query(src, site))
+
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for q in queries:
+        qn = " ".join(q.split()).strip()
+        if not qn:
+            continue
+        key = qn.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(qn)
+
+    return uniq
+
 # ── Product-URL validators ─────────────────────────────────────────────────────
 
 _ETEC_PAT = [
@@ -227,6 +267,22 @@ def brave_search(query: str, api_key: str) -> list:
         if resp.info().get("Content-Encoding") == "gzip":
             raw = gzip.decompress(raw)
     return json.loads(raw.decode("utf-8")).get("web", {}).get("results", [])
+
+
+def search_result_meta(result: dict, query: str, rank: int) -> dict:
+    """Keep search metadata so parser can still extract fields when page fetch is blocked."""
+    thumb = result.get("thumbnail")
+    image = None
+    if isinstance(thumb, dict):
+        image = thumb.get("src") or thumb.get("original")
+    return {
+        "query": query,
+        "rank": rank,
+        "title": result.get("title"),
+        "description": result.get("description"),
+        "extra_snippets": result.get("extra_snippets") or [],
+        "thumbnail": image,
+    }
 
 # ── Playwright page extraction ─────────────────────────────────────────────────
 
@@ -362,28 +418,47 @@ async def run(sources: list, api_key: str):
         for idx, src in enumerate(sources, 1):
             ref   = src.get("reference", f"src_{idx}")
             label = clean_name(src.get("name", ref))[:70]
+            source_brand = (src.get("brand") or "").strip() or None
+            source_ean   = get_ean(src) or None
+            source_model = get_model(src) or None
             print(f"[{idx}/{total}] {label}")
 
             for name, site, fname in RETAILERS:
-                query = build_query(src, site)
-                print(f"  [{name:22s}] {query[:68]}")
+                queries = build_queries(src, site)[:MAX_QUERIES_PER_RETAILER]
+                print(f"  [{name:22s}] trying {len(queries)} query variants")
 
-                try:
-                    results = brave_search(query, api_key)
+                new_results: list[tuple[dict, str]] = []
+                seen_new: set[str] = set()
+
+                for q_idx, query in enumerate(queries, start=1):
+                    print(f"  [{name:22s}] q{q_idx}: {query[:68]}")
+                    try:
+                        results = brave_search(query, api_key)
+                    except Exception as exc:
+                        print(f"  [{name:22s}] Brave error: {exc}")
+                        time.sleep(BRAVE_RATE)
+                        continue
                     time.sleep(BRAVE_RATE)
-                except Exception as exc:
-                    print(f"  [{name:22s}] Brave error: {exc}")
-                    continue
 
-                new_urls = [
-                    r["url"]
-                    for r in results
-                    if is_product_url(r.get("url", ""), name)
-                    and r.get("url") not in visited_urls[name]
-                ]
-                print(f"  [{name:22s}] {len(new_urls)} new product URLs")
+                    for r in results:
+                        url = r.get("url", "")
+                        if (
+                            not url
+                            or not is_product_url(url, name)
+                            or url in visited_urls[name]
+                            or url in seen_new
+                        ):
+                            continue
+                        seen_new.add(url)
+                        new_results.append((r, query))
 
-                for url in new_urls:
+                    if len(new_results) >= TARGET_URLS_PER_RETAILER:
+                        break
+
+                print(f"  [{name:22s}] {len(new_results)} new product URLs")
+
+                for rank, (web_result, query_used) in enumerate(new_results, start=1):
+                    url = web_result["url"]
                     ctx = await browser.new_context(
                         user_agent=USER_AGENT,
                         viewport={"width": 1280, "height": 800},
@@ -401,7 +476,11 @@ async def run(sources: list, api_key: str):
                         data = await extract_page_data(page, url, name)
                         data["source_reference"] = ref
                         data["source_name"]      = label
+                        data["source_brand"]     = source_brand
+                        data["source_ean"]       = source_ean
+                        data["source_model"]     = source_model
                         data["reference"]        = make_ref(url)
+                        data["search_result"]    = search_result_meta(web_result, query_used, rank)
 
                         retailer_data[name].append(data)
                         visited_urls[name].add(url)

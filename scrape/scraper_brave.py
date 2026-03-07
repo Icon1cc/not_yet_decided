@@ -52,6 +52,8 @@ HERE = Path(__file__).resolve().parent
 RATE                 = 1.1    # seconds between Brave API calls
 TOUT                 = 14     # HTTP timeout
 RESULTS_PER_QUERY    = 10
+MAX_QUERIES_PER_RETAILER = 3
+TARGET_URLS_PER_RETAILER = 20
 
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 
@@ -295,6 +297,44 @@ def build_query(source: dict, site: str) -> str:
     return f"site:{site} {term}"
 
 
+def build_queries(source: dict, site: str) -> list[str]:
+    """Generate multiple query variants to improve URL coverage."""
+    name  = (source.get("name") or "").strip()
+    brand = (source.get("brand") or "").strip()
+    words = name.split()
+    if not brand and words:
+        brand = words[0]
+
+    ean   = get_ean(source)
+    model = get_model(source)
+    cleaned_name = clean_name(name)
+
+    queries: list[str] = []
+    if ean:
+        queries.append(f"site:{site} {ean}")
+    if model:
+        bm = f"{brand} {model}".strip()
+        if bm:
+            queries.append(f"site:{site} {bm}")
+        queries.append(f'site:{site} "{model}"')
+    if cleaned_name:
+        queries.append(f'site:{site} "{cleaned_name}"')
+    queries.append(build_query(source, site))
+
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for q in queries:
+        qn = " ".join(q.split()).strip()
+        if not qn:
+            continue
+        key = qn.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(qn)
+    return uniq
+
+
 # ── Result builder ────────────────────────────────────────────────────────────
 
 def result_to_record(web_result: dict, retailer: str) -> dict:
@@ -326,20 +366,34 @@ def scrape_product(source: dict, api_key: str) -> dict:
 
     all_scraped = []
     for retailer, site in RETAILERS:
-        query = build_query(source, site)
-        print(f"      [{retailer:22s}] {query}")
-        try:
-            raw     = brave_search(query, api_key)
-            records = [
-                result_to_record(r, retailer)
-                for r in raw.get("web", {}).get("results", [])
-                if is_product_url(r.get("url", ""), retailer)
-            ]
-            print(f"      [{retailer:22s}] → {len(records)} product URLs")
-            all_scraped.extend(records)
-        except RuntimeError as e:
-            print(f"      [{retailer:22s}] ✗ {e}")
-        time.sleep(RATE)
+        queries = build_queries(source, site)[:MAX_QUERIES_PER_RETAILER]
+        print(f"      [{retailer:22s}] trying {len(queries)} query variants")
+
+        seen_urls: set[str] = set()
+        retailer_records: list[dict] = []
+
+        for q_idx, query in enumerate(queries, start=1):
+            print(f"      [{retailer:22s}] q{q_idx}: {query}")
+            try:
+                raw = brave_search(query, api_key)
+            except Exception as e:
+                print(f"      [{retailer:22s}] ✗ {e}")
+                time.sleep(RATE)
+                continue
+
+            for r in raw.get("web", {}).get("results", []):
+                url = r.get("url", "")
+                if not url or not is_product_url(url, retailer) or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                retailer_records.append(result_to_record(r, retailer))
+
+            time.sleep(RATE)
+            if len(retailer_records) >= TARGET_URLS_PER_RETAILER:
+                break
+
+        print(f"      [{retailer:22s}] → {len(retailer_records)} product URLs")
+        all_scraped.extend(retailer_records)
 
     print(f"  ✓ {len(all_scraped)} product URLs total")
     return {
