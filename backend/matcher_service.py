@@ -871,12 +871,22 @@ class CatalogMatcher:
             or current_signals["has_price_filter"]
             or current_signals["anchors"]
         )
+        # For follow-up detection, only hard product filters block expand mode.
+        # Generic anchor tokens (e.g. "happy", "share") from conversational phrases
+        # must not suppress it — they carry no product-specific intent.
+        has_hard_product_filter = bool(
+            current_signals["refs"]
+            or current_signals["categories"]
+            or current_signals["kinds"]
+            or current_signals["retailers"]
+            or current_signals["has_price_filter"]
+        )
         previous_source_refs = [
             str(entry.get("source_reference") or "").strip()
             for entry in (previous_submission or [])
             if isinstance(entry, dict) and str(entry.get("source_reference") or "").strip()
         ]
-        follow_up_expand = bool(previous_source_refs) and not has_structured_current_query and self._looks_like_expand_follow_up(query)
+        follow_up_expand = bool(previous_source_refs) and not has_hard_product_filter and self._looks_like_expand_follow_up(query)
         if follow_up_expand:
             effective_query = self._last_anchor_query(history) or query
         else:
