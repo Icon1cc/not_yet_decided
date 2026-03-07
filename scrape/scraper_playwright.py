@@ -260,7 +260,12 @@ async def extract_page_data(page, url: str, retailer: str) -> dict:
         )
         for text in ld_texts:
             try:
-                result["ld_json"].append(json.loads(text))
+                parsed = json.loads(text)
+                # Flatten: some sites put all schemas in one array inside a single tag
+                if isinstance(parsed, list):
+                    result["ld_json"].extend(parsed)
+                else:
+                    result["ld_json"].append(parsed)
             except (json.JSONDecodeError, ValueError):
                 pass
 

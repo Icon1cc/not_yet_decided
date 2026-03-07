@@ -101,13 +101,28 @@ def all_sources(raw: dict) -> list:
             blobs.append(d)
     return blobs
 
+# ── ld+json normaliser ────────────────────────────────────────────────────────
+
+def flatten_ld(blocks) -> list:
+    """
+    Flatten arbitrarily nested ld+json arrays into a flat list of dicts.
+    expert.at wraps all schemas in a single JSON array inside one <script> tag,
+    producing [[{WebSite},{Product},{BreadcrumbList}]] instead of [{...},{...}].
+    """
+    out = []
+    if isinstance(blocks, list):
+        for item in blocks:
+            out.extend(flatten_ld(item))
+    elif isinstance(blocks, dict):
+        out.append(blocks)
+    return out
+
+
 # ── Schema.org Product finder ─────────────────────────────────────────────────
 
 def find_schema_product(ld_jsons: list) -> dict:
     """Find the most specific schema.org Product block in ld+json."""
-    for block in ld_jsons:
-        if not isinstance(block, dict):
-            continue
+    for block in flatten_ld(ld_jsons):
         typ = block.get("@type", "")
         types = [typ] if isinstance(typ, str) else (typ if isinstance(typ, list) else [])
         if any("product" in t.lower() for t in types):
@@ -294,8 +309,8 @@ def extract_category(raw: dict) -> str | None:
             return str(cat[-1]).strip()
 
     # BreadcrumbList in ld+json
-    for block in raw.get("ld_json") or []:
-        if isinstance(block, dict) and block.get("@type") == "BreadcrumbList":
+    for block in flatten_ld(raw.get("ld_json") or []):
+        if block.get("@type") == "BreadcrumbList":
             items = block.get("itemListElement") or []
             names = []
             for item in items:
@@ -362,8 +377,8 @@ def extract_specifications(raw: dict) -> dict | None:
             specs["description"] = desc[:800]
 
     # ── From ld+json BreadcrumbList ────────────────────────────────────────
-    for block in raw.get("ld_json") or []:
-        if isinstance(block, dict) and block.get("@type") == "BreadcrumbList":
+    for block in flatten_ld(raw.get("ld_json") or []):
+        if block.get("@type") == "BreadcrumbList":
             items = block.get("itemListElement") or []
             bc = []
             for it in items:
