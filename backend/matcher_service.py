@@ -678,11 +678,8 @@ class CatalogMatcher:
             filtered = [s for s in sources if self._source_matches_query_anchor(s, anchor_tokens)]
             if filtered:
                 sources = filtered
-            else:
-                # If strict anchors miss, keep broader kind/category filtered candidates.
-                # Only return empty when the query had no other structured constraint.
-                if not allowed_kinds and not categories and not refs:
-                    return []
+            # If anchors don't match anything, fall through to scoring so generic/
+            # conversational queries still surface products from the loaded data files.
 
         query_norm = normalize_text(query)
         if any(word in query_norm for word in {"all", "every", "gesamte", "alle", "catalog", "katalog"}):
