@@ -24,6 +24,8 @@ The app runs at `http://localhost:5173` by default.
 
 **Home screen**
 
+![Home screen](docs/Home%20Page.png)
+
 When the app first loads, the user sees a landing screen with two interaction paths:
 
 1. **Upload a JSON catalog** — drag-and-drop or click the file zone to upload a `source_products_*.json` file. The file name is attached to a new session and acknowledged by the assistant.
@@ -47,6 +49,8 @@ The assistant response is inspected before rendering:
 
 - If the response body parses as a JSON array where each element has `image_url` and `url` fields, it is rendered as a **product card grid** — one card per competitor match, showing the product image, name, retailer label, price in EUR, and a "View Product" link to the original retailer page.
 - Otherwise the response is rendered as a plain text bubble.
+
+![Product page](docs/Product%20Page.png)
 
 Each product card shows:
 - Product image (square crop, object-fit contain)
