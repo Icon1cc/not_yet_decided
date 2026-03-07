@@ -6,6 +6,83 @@ The two main concerns are: **data collection** (scraping competitor product page
 
 ---
 
+## Interface
+
+The front-end is a chat-style web application built with React, Vite, and Tailwind CSS. It is the primary entry point for querying the system.
+
+### Starting the frontend
+
+```bash
+cd frontend
+bun install
+bun run dev
+```
+
+The app runs at `http://localhost:5173` by default.
+
+### User flow
+
+**Home screen**
+
+When the app first loads, the user sees a landing screen with two interaction paths:
+
+1. **Upload a JSON catalog** — drag-and-drop or click the file zone to upload a `source_products_*.json` file. The file name is attached to a new session and acknowledged by the assistant.
+2. **Type a natural language query** — free-text input at the bottom, or click one of the four suggested prompts ("Find competitors for cleaning products", "Match kitchen appliances under €50", etc.) to start immediately without uploading.
+
+**Session model**
+
+Every interaction creates a named session stored in the browser (IndexedDB via `lib/db`). Previous sessions appear in the left sidebar and can be resumed or deleted. A session tracks the uploaded file name and the full message history.
+
+**Inside a session**
+
+Once a session is active, the layout switches to a chat feed:
+
+- User messages appear as right-aligned bubbles.
+- If no file has been uploaded yet, the drop zone is shown inline in the chat feed.
+- After sending a message, the assistant processes the query through the retrieval pipeline (exact match → Qdrant hybrid BM25+dense → LLM filtering) and responds.
+
+**Response rendering**
+
+The assistant response is inspected before rendering:
+
+- If the response body parses as a JSON array where each element has `image_url` and `url` fields, it is rendered as a **product card grid** — one card per competitor match, showing the product image, name, retailer label, price in EUR, and a "View Product" link to the original retailer page.
+- Otherwise the response is rendered as a plain text bubble.
+
+Each product card shows:
+- Product image (square crop, object-fit contain)
+- Product name
+- Retailer name (e.g. `AMAZON AT`, `EXPERT AT`) in small caps
+- Price in EUR (`€9.88`)
+- A full-width "View Product" button that opens the competitor listing in a new tab
+
+The match count is shown above the card grid ("1 MATCH FOUND", "3 MATCHES FOUND") so the user immediately knows how many competitor listings were identified. Continuing to type in the input bar at the bottom allows follow-up queries within the same session.
+
+**End-to-end flow summary**
+
+```
+User uploads source_products.json  or  types a query
+        │
+        ▼
+Session created, query sent to backend
+        │
+        ▼
+Backend: exact identifier match (EAN / GTIN / name)
+        │
+        ▼
+Backend: Qdrant hybrid retrieval (BM25 sparse + dense, RRF fusion)
+        │
+        ▼
+Backend: LLM match / no-match filter (Claude Sonnet, batched)
+        │
+        ▼
+Response: [{name, retailer, price_eur, image_url, url}, ...]
+        │
+        ▼
+Frontend renders product card grid with prices and direct links
+```
+
+---
+
 ## The Problem
 
 Austrian electronics retailers sell largely overlapping product catalogs, but tracking competitor pricing manually is impractical at scale. This system takes a list of source products — each with a name, brand, EAN, and specifications — and automatically:
@@ -33,6 +110,16 @@ Austrian electronics retailers sell largely overlapping product catalogs, but tr
 ## Project Structure
 
 ```
+frontend/
+  src/pages/Index.tsx           # Main chat + session UI
+  src/components/
+    DropZone.tsx                # JSON file upload zone
+    ChatMessage.tsx             # Message renderer (text bubble or product card grid)
+    ProductCard.tsx             # Single competitor match card
+    SessionSidebar.tsx          # Session list + navigation
+    ChatInput.tsx               # Text input bar
+  src/lib/db.ts                 # IndexedDB session persistence
+
 data/
   source_products_*.json        # Source products to match (input)
   target_pool_*.json            # Visible-retailer product pools (Amazon, MediaMarkt)

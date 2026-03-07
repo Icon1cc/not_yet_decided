@@ -32,6 +32,11 @@ _RETAILER_SUFFIX = re.compile(
 _URL_HTML_EXT = re.compile(r"\.(?:html?|php)$", re.IGNORECASE)
 _URL_TRAILING_ID = re.compile(r"-\d{5,7}(?:-l\d+)?$", re.IGNORECASE)
 
+ALLOWED_HOSTS = {
+    "Cyberport AT": {"cyberport.at"},
+    "electronic4you.at": {"electronic4you.at"},
+}
+
 
 def resolve(path_str: str) -> Path:
     p = Path(path_str)
@@ -113,6 +118,16 @@ def infer_category(url: str | None) -> str | None:
     return " > ".join(keep)
 
 
+def host_allowed(url: str, retailer: str) -> bool:
+    try:
+        host = urllib.parse.urlparse(url).netloc.lower()
+    except ValueError:
+        return False
+    host = host.removeprefix("www.")
+    allowed = ALLOWED_HOSTS.get(retailer, set())
+    return host in allowed
+
+
 def source_entries(scraped_paths: list[Path]) -> list[dict]:
     all_items: list[dict] = []
     for p in scraped_paths:
@@ -147,30 +162,30 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
             url = hit.get("url")
             if not isinstance(url, str) or not url.strip():
                 continue
+            if not host_allowed(url, retailer):
+                continue
 
             dedupe_key = (str(src_ref), url)
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
 
-            name = clean_name(hit.get("name")) or url_slug_name(url)
-            brand = first_brand(name, src_name)
-            ean = valid_ean(hit.get("ean")) or query_ean
-
-            specs = {}
-            desc = hit.get("description")
-            if isinstance(desc, str) and desc.strip():
-                specs["_search_description"] = desc.strip()[:600]
-            if isinstance(query_model, str) and query_model.strip():
-                specs["query_model"] = query_model.strip()
-            if query_ean:
-                specs["query_ean"] = query_ean
+            # URL-only mode: all extracted fields must come from URL structure.
             slug_name = url_slug_name(url)
-            if slug_name:
-                specs["_url_slug_name"] = slug_name
-
-            if not name and not brand and not ean:
+            name = slug_name
+            brand = first_brand(slug_name)
+            ean = None
+            if not name and not brand:
                 continue
+
+            specs = {
+                "_url_slug_name": slug_name,
+                "_url_path": urllib.parse.urlparse(url).path,
+            }
+            if isinstance(query_model, str) and query_model.strip():
+                specs["source_query_model"] = query_model.strip()
+            if query_ean:
+                specs["source_query_ean"] = query_ean
 
             record = {
                 "source_reference": src_ref,
@@ -181,9 +196,9 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
                 "name": name,
                 "brand": brand,
                 "category": infer_category(url),
-                "image_url": hit.get("image_url"),
-                "price_eur": hit.get("price_eur"),
-                "specifications": specs or None,
+                "image_url": None,
+                "price_eur": None,
+                "specifications": specs,
             }
             by_retailer[retailer].append(record)
 
