@@ -31,7 +31,7 @@ def _parse_decisions(response: str, candidates: list[dict]) -> list[str]:
             continue
         assert ": " in line, f"Unexpected LLM output line (missing ': '): {line!r}"
         ref, decision = line.split(": ", 1)
-        ref, decision = ref.strip(), decision.strip()
+        ref, decision = ref.strip().strip("[]"), decision.strip()
         decision = decision.upper().strip().rstrip(".")
         assert ref in valid_refs, f"LLM returned unknown reference: {ref!r}"
         assert decision in ("MATCH", "NO_MATCH"), f"Unexpected decision for {ref}: {decision!r}"
@@ -59,29 +59,20 @@ def filter_candidates(
         batch = candidates[i : i + batch_size]
         prompt = build_match_prompt(source, batch)
 
-        print(f"\n  ── LLM call (batch {i // batch_size + 1}, {len(batch)} candidates) ──")
-        print("  CONTEXT IN (summary):")
-        lines = prompt.splitlines()
-        # print source block (first ~6 lines = name + top meta fields)
-        in_specs = False
-        source_lines_printed = 0
-        for line in lines:
-            if line.startswith("CANDIDATES:"):
-                break
-            if line.startswith("Specifications:"):
-                in_specs = True
-            if in_specs:
-                continue
-            print(f"    {line}")
-            source_lines_printed += 1
-        # print candidate summary: reference + name only
+        b = i // batch_size + 1
+        print(f"\n  ── LLM batch {b} ({len(batch)} candidates) ──────────────────────────")
+        print(f"  SOURCE : [{source['reference']}] {(source.get('name') or '')[:80]}")
+        brand = source.get('brand') or '-'
+        price = source.get('price_eur') or '-'
+        ean = source.get('ean') or '-'
+        print(f"           brand={brand}  price={price}  ean={ean}")
+        print(f"  CANDIDATES:")
         for c in batch:
-            print(f"    [{c['reference']}] {(c.get('name') or '')[:80]}")
-        print(f"    ... ({len(batch)} candidates, full chunk_text sent to LLM)")
+            print(f"    [{c['reference']}] {(c.get('name') or '')[:75]}")
 
         response = _call_openrouter(MATCH_SYSTEM, prompt, model)
 
-        print("  RESPONSE OUT:")
+        print(f"  LLM RESPONSE:")
         for line in response.splitlines():
             print(f"    {line}")
 

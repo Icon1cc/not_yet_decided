@@ -25,6 +25,7 @@ from qdrant_client.models import (
 )
 
 from retrieval.embeddings import embed_texts
+from retrieval.enrichment import enrich_products
 
 
 def product_to_chunk(product: dict) -> str:
@@ -34,18 +35,35 @@ def product_to_chunk(product: dict) -> str:
     if name:
         lines.append(f"Product name: {name}.")
 
+    # enrichment tags (present after enrich_products() has been called)
+    tag_parts = []
+    if product.get("product_type"):
+        tag_parts.append(f"Product type: {product['product_type']}")
+    if product.get("brand_norm"):
+        tag_parts.append(f"Brand: {product['brand_norm']}")
+    if product.get("size") is not None:
+        unit = product.get("size_unit") or ""
+        tag_parts.append(f"Size: {product['size']} {unit}".strip())
+    if product.get("resolution"):
+        tag_parts.append(f"Resolution: {product['resolution']}")
+    if product.get("model_number"):
+        tag_parts.append(f"Model number: {product['model_number']}")
+    if tag_parts:
+        lines.append("\n".join(tag_parts))
+
     meta_parts = []
     for key, label in [
-        ("retailer", "Retailer"),
         ("category", "Category"),
         ("brand", "Brand"),
         ("ean", "EAN"),
         ("price_eur", "Price EUR"),
-        ("reference", "Reference"),
+        ("retailer", "Retailer"),
     ]:
         val = product.get(key)
-        meta_parts.append(f"{label}: {val if val is not None and val != '' else 'null'}")
-    lines.append("\n".join(meta_parts))
+        if val is not None and val != "":
+            meta_parts.append(f"{label}: {val}")
+    if meta_parts:
+        lines.append("\n".join(meta_parts))
 
     specs = product.get("specifications")
     if isinstance(specs, dict):
@@ -70,7 +88,7 @@ def ensure_collection(client: QdrantClient, collection: str, dim: int) -> None:
             )
         },
     )
-    for field in ("category", "brand", "retailer", "ean", "reference"):
+    for field in ("category", "brand", "retailer", "ean", "reference", "product_type", "resolution", "model_number", "brand_norm", "size_unit"):
         client.create_payload_index(collection, field, field_schema=KeywordIndexParams(type=KeywordIndexType.KEYWORD))
     client.create_payload_index(
         collection,
@@ -86,6 +104,11 @@ def ensure_collection(client: QdrantClient, collection: str, dim: int) -> None:
         "price_eur",
         field_schema=FloatIndexParams(type=FloatIndexType.FLOAT),
     )
+    client.create_payload_index(
+        collection,
+        "size",
+        field_schema=FloatIndexParams(type=FloatIndexType.FLOAT),
+    )
 
 
 def index_products(
@@ -98,6 +121,9 @@ def index_products(
 ) -> None:
     client = QdrantClient(url=qdrant_url)
     ensure_collection(client, collection, embedding_dim)
+
+    print("Running product enrichment (product_type, brand_norm, screen_size_inch, model_number, resolution)...")
+    products = enrich_products(products, api_key)
 
     bm25_model = SparseTextEmbedding("Qdrant/bm25")
 
@@ -117,6 +143,7 @@ def index_products(
                 "reference": ref,
                 "name": product.get("name"),
                 "brand": product.get("brand") or None,
+                "brand_norm": product.get("brand_norm"),
                 "category": product.get("category"),
                 "ean": product.get("ean"),
                 "price_eur": product.get("price_eur"),
@@ -124,6 +151,12 @@ def index_products(
                 "url": product.get("url"),
                 "image_url": product.get("image_url"),
                 "specifications": product.get("specifications"),
+                # enrichment tags
+                "product_type": product.get("product_type"),
+                "size": product.get("size"),
+                "size_unit": product.get("size_unit"),
+                "model_number": product.get("model_number"),
+                "resolution": product.get("resolution"),
                 "chunk_text": product_to_chunk(product),
             }
             sparse_obj = sparse.as_object()
