@@ -6,13 +6,45 @@
 - resolution: regex on name + specs
 """
 import re
+import sys
+from pathlib import Path
+
 import requests
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from matching_utils import infer_product_kind
 
 PRODUCT_TYPES = (
     "tv", "headphone", "power_cable", "av_cable", "speaker", "soundbar",
     "coffee_machine", "coffee_accessory", "air_fryer", "air_fryer_accessory",
     "hair_care", "kitchen_appliance", "refrigerator", "vacuum", "accessory", "other",
 )
+
+_KIND_TO_PRODUCT_TYPE = {
+    "air_fryer": "air_fryer",
+    "coffee_machine": "coffee_machine",
+    "descaler": "coffee_accessory",
+    "dishwasher": "other",
+    "dryer": "other",
+    "freezer": "refrigerator",
+    "fridge": "refrigerator",
+    "grill": "kitchen_appliance",
+    "hair_styler": "hair_care",
+    "headphone": "headphone",
+    "hob": "kitchen_appliance",
+    "kettle": "kitchen_appliance",
+    "microwave": "kitchen_appliance",
+    "mixer": "kitchen_appliance",
+    "range_hood": "other",
+    "toaster": "kitchen_appliance",
+    "tv": "tv",
+    "vacuum": "vacuum",
+    "washer": "other",
+    "washer_dryer": "other",
+}
 
 ENRICHMENT_SYSTEM = f"""Classify each product into exactly one product type.
 Output format: <reference>: <type>
@@ -60,12 +92,23 @@ def classify_product_types(
     batch_size: int = 48,
 ) -> dict[str, str]:
     """Returns {reference: product_type} for all products."""
+    if not api_key:
+        return {
+            p["reference"]: _KIND_TO_PRODUCT_TYPE.get(infer_product_kind(p), "other")
+            for p in products
+        }
+
     result: dict[str, str] = {}
 
     for i in range(0, len(products), batch_size):
         batch = products[i : i + batch_size]
         lines = [f"{p['reference']} | {(p.get('name') or '')[:120]}" for p in batch]
-        raw = _call_openrouter(ENRICHMENT_SYSTEM, "\n".join(lines), model, api_key)
+        try:
+            raw = _call_openrouter(ENRICHMENT_SYSTEM, "\n".join(lines), model, api_key)
+        except Exception:
+            for p in batch:
+                result[p["reference"]] = _KIND_TO_PRODUCT_TYPE.get(infer_product_kind(p), "other")
+            continue
 
         for line in raw.splitlines():
             line = line.strip()
@@ -169,14 +212,6 @@ def extract_structured_fields(product: dict) -> dict:
         if val and str(val).strip():
             model_number = str(val).strip()
             break
-    # fallback: also check top-level ean/gtin
-    if not model_number:
-        for key in ("ean", "gtin"):
-            val = product.get(key)
-            if val:
-                model_number = str(val).strip()
-                break
-
     # resolution
     resolution = None
     for pattern, label in _RESOLUTION_PATTERNS:

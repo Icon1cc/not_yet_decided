@@ -8,6 +8,8 @@
 qdrant_storage/
 __pycache__/
 frontend/node_modules/
+frontend/dist/
+data/matched_ui_output.json
 .DS_Store
 *.log
 *.pyc

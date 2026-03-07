@@ -1,5 +1,14 @@
 import os
+import sys
+from pathlib import Path
+
 import requests
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from matching_utils import extract_product_signals, score_product_match
 from models import Competitor, SourceMatch
 from prompts import MATCH_SYSTEM, build_match_prompt
 
@@ -52,11 +61,33 @@ def filter_candidates(
     if not candidates:
         return SourceMatch(source_reference=source["reference"], competitors=[])
 
+    source_signals = extract_product_signals(source)
     candidate_index = {c["reference"]: c for c in candidates}
     matched_refs: list[str] = []
+    llm_candidates: list[dict] = []
 
-    for i in range(0, len(candidates), batch_size):
-        batch = candidates[i : i + batch_size]
+    for candidate in candidates:
+        result = score_product_match(source, candidate, source_signals=source_signals)
+        if result.score >= 0.95:
+            matched_refs.append(candidate["reference"])
+        elif result.score >= 0.55:
+            llm_candidates.append(candidate)
+
+    if not llm_candidates or not os.environ.get("OPENROUTER_API_KEY"):
+        competitors = [
+            Competitor(
+                reference=ref,
+                competitor_retailer=candidate_index[ref].get("retailer") or "",
+                competitor_product_name=candidate_index[ref].get("name") or "",
+                competitor_url=candidate_index[ref].get("url"),
+                competitor_price=candidate_index[ref].get("price_eur"),
+            )
+            for ref in dict.fromkeys(matched_refs)
+        ]
+        return SourceMatch(source_reference=source["reference"], competitors=competitors)
+
+    for i in range(0, len(llm_candidates), batch_size):
+        batch = llm_candidates[i : i + batch_size]
         prompt = build_match_prompt(source, batch)
 
         b = i // batch_size + 1
@@ -86,6 +117,6 @@ def filter_candidates(
             competitor_url=candidate_index[ref].get("url"),
             competitor_price=candidate_index[ref].get("price_eur"),
         )
-        for ref in matched_refs
+        for ref in dict.fromkeys(matched_refs)
     ]
     return SourceMatch(source_reference=source["reference"], competitors=competitors)

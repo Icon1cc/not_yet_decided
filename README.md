@@ -8,9 +8,33 @@ The two main concerns are: **data collection** (scraping competitor product page
 
 ## Interface
 
-The front-end is a chat-style web application built with React, Vite, and Tailwind CSS. It is the primary entry point for querying the system.
+The system now runs as a real frontend + backend chat application:
 
-### Starting the frontend
+- Frontend: React + Vite + Tailwind (`frontend/`)
+- Backend API: FastAPI (`backend/api.py`)
+- Matching engine: deterministic scorer shared by CLI + API (`matching_utils.py`)
+
+Runtime target DB loading behavior:
+- Loads every `data/target_pool_*.json` file (visible retailers)
+- Loads every `matched_*.json` file from `output/` or `data/` (hidden retailers), with `output/` taking precedence per filename
+- If no local target files are available, the backend can use Brave web search fallback when `BRAVE_SEARCH_API_KEY` (or `BRAVE_API_KEY`) is set
+- Target files are refreshed automatically on each query (no backend restart needed after adding files)
+- Query intent parsing is product-agnostic: it extracts dynamic anchor tokens and product-type hints (e.g. microwave, television, dishwasher) to narrow results for any product query
+
+### Start backend
+
+```bash
+uv sync
+uv run uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000
+```
+
+Health check:
+
+```bash
+curl -sS http://127.0.0.1:8000/api/v1/health
+```
+
+### Start frontend
 
 ```bash
 cd frontend
@@ -18,7 +42,7 @@ npm install
 npm run dev
 ```
 
-The app runs at `http://localhost:5173` by default.
+The frontend runs on `http://localhost:8080` and proxies `/api/*` to `http://127.0.0.1:8000`.
 
 ### User flow
 
@@ -33,7 +57,12 @@ When the app first loads, the user sees a landing screen with two interaction pa
 
 **Session model**
 
-Every interaction creates a named session stored in the browser (IndexedDB via `lib/db`). Previous sessions appear in the left sidebar and can be resumed or deleted. A session tracks the uploaded file name and the full message history.
+Every interaction creates a named session stored in the browser (IndexedDB via `lib/db`). Previous sessions appear in the left sidebar and can be resumed or deleted. A session tracks:
+
+- uploaded file name
+- uploaded source catalog JSON
+- full chat history
+- backend response payloads (cards + submission JSON)
 
 **Inside a session**
 
@@ -47,8 +76,12 @@ Once a session is active, the layout switches to a chat feed:
 
 The assistant response is inspected before rendering:
 
-- If the response body parses as a JSON array where each element has `image_url` and `url` fields, it is rendered as a **product card grid** — one card per competitor match, showing the product image, name, retailer label, price in EUR, and a "View Product" link to the original retailer page.
-- Otherwise the response is rendered as a plain text bubble.
+- Backend responses include:
+  - `answer` (summary text)
+  - `cards` (UI card grid payload)
+  - `submission` (scoring-ready output format)
+- Cards are rendered directly in chat.
+- Submission JSON is shown in an expandable block per assistant response.
 
 ![Product page](docs/Product%20Page.png)
 
@@ -59,7 +92,7 @@ Each product card shows:
 - Price in EUR (`€9.88`)
 - A full-width "View Product" button that opens the competitor listing in a new tab
 
-The match count is shown above the card grid ("1 MATCH FOUND", "3 MATCHES FOUND") so the user immediately knows how many competitor listings were identified. Continuing to type in the input bar at the bottom allows follow-up queries within the same session.
+The match count is shown above the card grid ("1 MATCH FOUND", "3 MATCHES FOUND") so the user immediately knows how many competitor listings were identified. Continuing to type in the input bar at the bottom allows follow-up queries within the same session. Filter-only follow-ups like "only under €500" reuse prior user context automatically.
 
 **End-to-end flow summary**
 
@@ -78,11 +111,41 @@ Backend: Qdrant BM25 sparse
 Backend: LLM match / no-match filter (Claude Sonnet, batched)
         │
         ▼
-Response: [{name, retailer, price_eur, image_url, url}, ...]
+Response:
+  answer: text summary
+  cards: [{reference, source_reference, name, retailer, price_eur, image_url, url}, ...]
+  submission: [{source_reference, competitors:[...]}]
+  persisted output file: data/matched_ui_output.json
         │
         ▼
-Frontend renders product card grid with prices and direct links
+Frontend renders product cards + scoring-format JSON
 ```
+
+### Scoring output format
+
+The backend returns and the UI stores matches in this format:
+
+```json
+[
+  {
+    "source_reference": "P_49A0DBE2",
+    "competitors": [
+      {
+        "reference": "P_0243A3DB",
+        "competitor_retailer": "Visible Retailer A",
+        "competitor_product_name": "Bosch Geschirrspüler Serie 4",
+        "competitor_url": "https://www.retailer-a.at/product/12345",
+        "competitor_price": 449.99
+      }
+    ]
+  }
+]
+```
+
+Scoring keys:
+
+- Visible retailers: `source_reference` + `competitors[].reference`
+- Hidden retailers: `source_reference` + `competitors[].competitor_url`
 
 ---
 
@@ -113,6 +176,9 @@ Austrian electronics retailers sell largely overlapping product catalogs, but tr
 ## Project Structure
 
 ```
+backend/
+  api.py                          # FastAPI chat endpoint (/api/v1/chat, /api/v1/health)
+
 frontend/
   src/pages/Index.tsx           # Main chat + session UI
   src/components/
@@ -151,6 +217,7 @@ retrieval/
 
 initialize_db.py                # CLI: load JSON files and index into Qdrant
 constants.py                    # Paths, model names, Qdrant config
+matching_utils.py               # Shared deterministic matcher used by CLI + API
 ```
 
 ---

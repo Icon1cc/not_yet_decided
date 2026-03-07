@@ -148,8 +148,6 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
 
     for src in items:
         src_ref = src.get("source_reference")
-        query_ean = valid_ean(src.get("query_ean"))
-        query_model = src.get("query_model")
         if not src_ref:
             continue
 
@@ -183,11 +181,6 @@ def to_match_records(items: list[dict]) -> dict[str, list[dict]]:
                 "_url_slug_name": slug_name,
                 "_url_path": urllib.parse.urlparse(url).path,
             }
-            if isinstance(query_model, str) and query_model.strip():
-                specs["source_query_model"] = query_model.strip()
-            if query_ean:
-                specs["source_query_ean"] = query_ean
-
             record = {
                 "reference": hit.get("reference") or make_ref(url),
                 "retailer": retailer,

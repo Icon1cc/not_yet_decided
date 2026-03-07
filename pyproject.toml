@@ -7,6 +7,8 @@ dependencies = [
     "claude-agent-sdk",
     "anthropic",
     "requests>=2.32.5",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
     "playwright>=1.40.0",
     "playwright-stealth>=1.0.6",
 ]

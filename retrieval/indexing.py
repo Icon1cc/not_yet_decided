@@ -1,8 +1,16 @@
 import argparse
 import hashlib
 import json
+import sys
+from pathlib import Path
 
 from fastembed import SparseTextEmbedding
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from matching_utils import clean_specs_for_matching, extract_product_signals
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -30,6 +38,7 @@ from retrieval.enrichment import enrich_products
 
 def product_to_chunk(product: dict) -> str:
     lines = []
+    signals = extract_product_signals(product)
 
     name = product.get("name")
     if name:
@@ -48,6 +57,12 @@ def product_to_chunk(product: dict) -> str:
         tag_parts.append(f"Resolution: {product['resolution']}")
     if product.get("model_number"):
         tag_parts.append(f"Model number: {product['model_number']}")
+    for model in sorted(signals.strong_models)[:2]:
+        tag_parts.append(f"Normalized model: {model}")
+    if signals.kind:
+        tag_parts.append(f"Product kind: {signals.kind}")
+    if signals.screen_size_inch is not None:
+        tag_parts.append(f"Screen size inch: {signals.screen_size_inch}")
     if tag_parts:
         lines.append("\n".join(tag_parts))
 
@@ -65,7 +80,7 @@ def product_to_chunk(product: dict) -> str:
     if meta_parts:
         lines.append("\n".join(meta_parts))
 
-    specs = product.get("specifications")
+    specs = clean_specs_for_matching(product.get("specifications"))
     if isinstance(specs, dict):
         spec_parts = [f"{k}: {v}" for k, v in specs.items() if v is not None and v != ""]
         if spec_parts:
@@ -139,6 +154,7 @@ def index_products(
         for product, dense, sparse in zip(batch, dense_vecs, sparse_vecs):
             ref = product["reference"]
             point_id = int(hashlib.md5(ref.encode()).hexdigest(), 16) % (2**63)
+            clean_specs = clean_specs_for_matching(product.get("specifications"))
             payload = {
                 "reference": ref,
                 "name": product.get("name"),
@@ -150,14 +166,14 @@ def index_products(
                 "retailer": product.get("retailer"),
                 "url": product.get("url"),
                 "image_url": product.get("image_url"),
-                "specifications": product.get("specifications"),
+                "specifications": clean_specs,
                 # enrichment tags
                 "product_type": product.get("product_type"),
                 "size": product.get("size"),
                 "size_unit": product.get("size_unit"),
                 "model_number": product.get("model_number"),
                 "resolution": product.get("resolution"),
-                "chunk_text": product_to_chunk(product),
+                "chunk_text": product_to_chunk({**product, "specifications": clean_specs}),
             }
             sparse_obj = sparse.as_object()
             points.append(

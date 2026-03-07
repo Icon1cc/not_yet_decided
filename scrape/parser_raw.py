@@ -581,30 +581,6 @@ def extract_specifications(raw: dict) -> dict | None:
                 if v not in (None, "", [], {}):
                     specs[field] = v
 
-    # ── Fallback metadata from search/source/url ──────────────────────────
-    search = search_blob(raw)
-    if search:
-        if search.get("query"):
-            specs.setdefault("_search_query", search["query"])
-        if search.get("rank") is not None:
-            specs.setdefault("_search_rank", search["rank"])
-        if search.get("description"):
-            specs.setdefault("_search_description", str(search["description"])[:500])
-        snippets = search.get("extra_snippets") or []
-        if snippets:
-            joined = " | ".join(str(s) for s in snippets if s)
-            if joined:
-                specs.setdefault("_search_snippets", joined[:700])
-
-    for field in ("source_brand", "source_ean", "source_model"):
-        value = raw.get(field)
-        if value not in (None, "", [], {}):
-            specs.setdefault(field, value)
-
-    url_name = name_from_url(raw.get("url", ""))
-    if url_name:
-        specs.setdefault("_url_slug_name", url_name)
-
     return specs if specs else None
 
 

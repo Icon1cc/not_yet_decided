@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Search } from "lucide-react";
+
 import { SessionSidebar } from "@/components/SessionSidebar";
 import { DropZone } from "@/components/DropZone";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { Search } from "lucide-react";
+import { sendChatQuery } from "@/lib/api";
 import {
   getAllSessions,
   saveSession,
@@ -13,23 +15,62 @@ import {
   type ChatMessage as ChatMsg,
 } from "@/lib/db";
 
-const MOCK_RESPONSE = JSON.stringify([
-  {
-    name: "1000ml Universal-Entkalker",
-    retailer: "Amazon AT",
-    price_eur: 9.88,
-    image_url: "https://m.media-amazon.com/images/I/617-0kYRuZL._AC_SL1400_.jpg",
-    url: "https://www.amazon.de/",
-  },
-]);
+const QUICK_SUGGESTIONS = [
+  "Find competitors for cleaning products",
+  "Match kitchen appliances under €50",
+  "Show alternatives for Samsung TVs",
+  "Find hidden retailer matches for Bosch dishwashers",
+];
 
-function createSession(fileName?: string): Session {
+function createSession(fileName?: string, products?: Record<string, unknown>[] | null): Session {
   return {
     id: crypto.randomUUID(),
     timestamp: Date.now(),
     uploaded_file_name: fileName || null,
+    uploaded_source_products: products || null,
     messages: [],
   };
+}
+
+function buildUserMessage(content: string): ChatMsg {
+  return {
+    role: "user",
+    content,
+    timestamp: Date.now(),
+    cards: null,
+    submission: null,
+  };
+}
+
+function buildAiMessage(content: string, options?: Pick<ChatMsg, "cards" | "submission">): ChatMsg {
+  return {
+    role: "ai",
+    content,
+    timestamp: Date.now(),
+    cards: options?.cards || null,
+    submission: options?.submission || null,
+  };
+}
+
+function parseUploadedCatalog(text: string): Record<string, unknown>[] {
+  const parsed = JSON.parse(text);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Uploaded file must contain a JSON array of source products.");
+  }
+  if (parsed.length === 0) {
+    throw new Error("Uploaded catalog is empty.");
+  }
+  const invalid = parsed.find(
+    (row) =>
+      !row ||
+      typeof row !== "object" ||
+      !("reference" in row) ||
+      !("name" in row)
+  );
+  if (invalid) {
+    throw new Error("Each source product must include at least 'reference' and 'name'.");
+  }
+  return parsed as Record<string, unknown>[];
 }
 
 const Index = () => {
@@ -56,11 +97,72 @@ const Index = () => {
 
   const persistSession = useCallback(
     async (session: Session) => {
-      await saveSession(session);
-      setActiveSession({ ...session });
+      const updated = { ...session, timestamp: Date.now() };
+      await saveSession(updated);
+      setActiveSession({ ...updated });
       await refreshSessions();
+      return updated;
     },
     [refreshSessions]
+  );
+
+  const runQuery = useCallback(
+    async (session: Session, text: string) => {
+      const history = session.messages
+        .filter((m) => m.role === "user" && !m.content.startsWith("Uploaded file:"))
+        .map((m) => m.content);
+      const previousSubmission =
+        [...session.messages]
+          .reverse()
+          .find((m) => m.role === "ai" && m.submission && m.submission.length > 0)
+          ?.submission ?? null;
+
+      const withUser = {
+        ...session,
+        messages: [...session.messages, buildUserMessage(text)],
+      };
+      const persistedUser = await persistSession(withUser);
+
+      setLoading(true);
+      try {
+        const response = await sendChatQuery({
+          query: text,
+          sourceProducts: persistedUser.uploaded_source_products,
+          history,
+          previousSubmission,
+          persistOutput: true,
+          maxSources: text.toLowerCase().includes("all") ? 200 : 5,
+          maxCompetitorsPerSource: 12,
+        });
+
+        const withAi = {
+          ...persistedUser,
+          messages: [
+            ...persistedUser.messages,
+            buildAiMessage(response.answer, {
+              cards: response.cards,
+              submission: response.submission,
+            }),
+          ],
+        };
+        await persistSession(withAi);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown backend error";
+        const withError = {
+          ...persistedUser,
+          messages: [
+            ...persistedUser.messages,
+            buildAiMessage(
+              `Request failed. Start the backend and retry. Details: ${message}`
+            ),
+          ],
+        };
+        await persistSession(withError);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [persistSession]
   );
 
   const handleNew = useCallback(() => {
@@ -88,82 +190,85 @@ const Index = () => {
 
   const handleFileUpload = useCallback(
     async (file: File) => {
-      const session = activeSession || createSession(file.name);
-      session.uploaded_file_name = file.name;
-
-      const userMsg: ChatMsg = {
-        role: "user",
-        content: `Uploaded file: ${file.name}`,
-        timestamp: Date.now(),
-      };
-      session.messages = [...session.messages, userMsg];
-      await persistSession(session);
-
-      setLoading(true);
-      setTimeout(async () => {
-        const aiMsg: ChatMsg = {
-          role: "ai",
-          content: `File "${file.name}" loaded successfully. Ask me to find competitor matches for any product.`,
-          timestamp: Date.now(),
+      let parsedCatalog: Record<string, unknown>[];
+      try {
+        parsedCatalog = parseUploadedCatalog(await file.text());
+      } catch (error) {
+        const err = error instanceof Error ? error.message : "Invalid upload";
+        const fallback = activeSession || createSession(file.name);
+        const withError = {
+          ...fallback,
+          messages: [
+            ...fallback.messages,
+            buildAiMessage(`Upload failed: ${err}`),
+          ],
         };
-        session.messages = [...session.messages, aiMsg];
-        await persistSession(session);
-        setLoading(false);
-      }, 2000);
+        await persistSession(withError);
+        return;
+      }
+
+      const session = activeSession || createSession(file.name, parsedCatalog);
+      const updated = {
+        ...session,
+        uploaded_file_name: file.name,
+        uploaded_source_products: parsedCatalog,
+      };
+
+      const withUser = {
+        ...updated,
+        messages: [...updated.messages, buildUserMessage(`Uploaded file: ${file.name}`)],
+      };
+
+      const withAck = {
+        ...withUser,
+        messages: [
+          ...withUser.messages,
+          buildAiMessage(
+            `Loaded ${parsedCatalog.length} source products from "${file.name}". Ask for matches by product name/reference, retailer, price, or category.`
+          ),
+        ],
+      };
+
+      await persistSession(withAck);
     },
     [activeSession, persistSession]
   );
 
-  const handleSend = useCallback(
+  const startSessionAndSend = useCallback(
     async (text: string) => {
-      if (!activeSession) return;
-
-      const userMsg: ChatMsg = {
-        role: "user",
-        content: text,
-        timestamp: Date.now(),
-      };
-      const updated = {
-        ...activeSession,
-        messages: [...activeSession.messages, userMsg],
-      };
-      await persistSession(updated);
-
-      setLoading(true);
-      setTimeout(async () => {
-        const aiMsg: ChatMsg = {
-          role: "ai",
-          content: MOCK_RESPONSE,
-          timestamp: Date.now(),
-        };
-        const final = {
-          ...updated,
-          messages: [...updated.messages, aiMsg],
-        };
-        await persistSession(final);
-        setLoading(false);
-      }, 4000);
+      const s = createSession();
+      setActiveSession(s);
+      await saveSession(s);
+      await refreshSessions();
+      await runQuery(s, text);
     },
-    [activeSession, persistSession]
+    [refreshSessions, runQuery]
   );
 
   const hasMessages = activeSession && activeSession.messages.length > 0;
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* About Modal */}
       {showAbout && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40" onClick={() => setShowAbout(false)}>
-          <div className="bg-background border border-border rounded-sm max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40"
+          onClick={() => setShowAbout(false)}
+        >
+          <div
+            className="bg-background border border-border rounded-sm max-w-md w-full mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 bg-primary text-primary-foreground flex items-center justify-center font-mono text-sm font-bold rounded-sm">CM</div>
+              <div className="w-9 h-9 bg-primary text-primary-foreground flex items-center justify-center font-mono text-sm font-bold rounded-sm">
+                CM
+              </div>
               <h3 className="font-mono text-lg font-bold uppercase tracking-wider">About Us</h3>
             </div>
             <p className="font-sans text-sm leading-relaxed text-foreground mb-3">
-              Competitor Matcher is an AI-powered product intelligence platform that helps businesses discover, compare, and track competitor products across multiple retailers.
+              Competitor Matcher is an AI-powered product intelligence platform that finds, validates, and formats competitor product links for both visible and hidden retailers.
             </p>
             <p className="font-sans text-sm leading-relaxed text-muted-foreground mb-5">
-              Our matching algorithms analyze thousands of product catalogs in real-time, giving you actionable insights to stay ahead of the competition.
+              Output is generated directly in scoring-ready format (`source_reference` + `reference` / `competitor_url`) and persisted with chat history per session.
             </p>
             <button
               onClick={() => setShowAbout(false)}
@@ -174,6 +279,7 @@ const Index = () => {
           </div>
         </div>
       )}
+
       <SessionSidebar
         sessions={sessions}
         activeId={activeSession?.id || null}
@@ -185,7 +291,6 @@ const Index = () => {
 
       <main className="flex-1 flex flex-col h-screen min-w-0 bg-background">
         {!activeSession ? (
-          /* ─── Home / Empty State ─── */
           <div className="flex-1 flex flex-col items-center justify-center p-8">
             <div className="w-14 h-14 bg-primary text-primary-foreground flex items-center justify-center font-mono text-xl font-bold rounded-sm mb-6">
               CM
@@ -194,53 +299,22 @@ const Index = () => {
               Competitor Matcher
             </h2>
             <p className="font-sans text-sm text-muted-foreground mb-10 max-w-md text-center">
-              Upload a product catalog or ask a question to discover competitor products across retailers.
+              Upload a source catalog JSON or ask directly about a product. The response is generated in submission-ready scoring format.
             </p>
 
             <div className="w-full max-w-md mb-8">
-              <DropZone
-                onFileUpload={(file) => {
-                  const s = createSession(file.name);
-                  setActiveSession(s);
-                  saveSession(s).then(() => {
-                    refreshSessions();
-                    handleFileUpload(file);
-                  });
-                }}
-              />
+              <DropZone onFileUpload={handleFileUpload} />
             </div>
 
-            {/* Quick start suggestions */}
             <div className="w-full max-w-lg mb-6">
               <p className="font-sans text-[10px] font-semibold uppercase tracking-widest text-muted-foreground text-center mb-3">
                 Or try asking
               </p>
               <div className="grid grid-cols-2 gap-2">
-                {[
-                  "Find competitors for cleaning products",
-                  "Match kitchen appliances under €50",
-                  "Compare top-rated electronics",
-                  "Show alternatives for personal care",
-                ].map((suggestion) => (
+                {QUICK_SUGGESTIONS.map((suggestion) => (
                   <button
                     key={suggestion}
-                    onClick={() => {
-                      const s = createSession();
-                      setActiveSession(s);
-                      saveSession(s).then(async () => {
-                        await refreshSessions();
-                        const userMsg: ChatMsg = { role: "user", content: suggestion, timestamp: Date.now() };
-                        s.messages = [userMsg];
-                        await persistSession(s);
-                        setLoading(true);
-                        setTimeout(async () => {
-                          const aiMsg: ChatMsg = { role: "ai", content: MOCK_RESPONSE, timestamp: Date.now() };
-                          s.messages = [...s.messages, aiMsg];
-                          await persistSession(s);
-                          setLoading(false);
-                        }, 4000);
-                      });
-                    }}
+                    onClick={() => startSessionAndSend(suggestion)}
                     className="flex items-start gap-2 text-left px-3 py-2.5 rounded-sm bg-secondary hover:bg-accent text-foreground font-sans text-xs transition-colors"
                   >
                     <Search className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
@@ -252,29 +326,12 @@ const Index = () => {
 
             <div className="w-full max-w-lg">
               <ChatInput
-                onSend={(text) => {
-                  const s = createSession();
-                  setActiveSession(s);
-                  saveSession(s).then(async () => {
-                    await refreshSessions();
-                    const userMsg: ChatMsg = { role: "user", content: text, timestamp: Date.now() };
-                    s.messages = [userMsg];
-                    await persistSession(s);
-                    setLoading(true);
-                    setTimeout(async () => {
-                      const aiMsg: ChatMsg = { role: "ai", content: MOCK_RESPONSE, timestamp: Date.now() };
-                      s.messages = [...s.messages, aiMsg];
-                      await persistSession(s);
-                      setLoading(false);
-                    }, 4000);
-                  });
-                }}
+                onSend={(text) => startSessionAndSend(text)}
                 disabled={loading}
                 placeholder="Ask anything about competitor products..."
               />
             </div>
 
-            {/* Footer */}
             <footer className="w-full max-w-lg mt-8 py-4 flex items-center justify-between font-sans text-[11px] text-muted-foreground">
               <p>© {new Date().getFullYear()} Competitor Matcher</p>
               <button
@@ -287,7 +344,6 @@ const Index = () => {
           </div>
         ) : (
           <>
-            {/* Session Header */}
             <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0 bg-background">
               <div className="w-6 h-6 bg-primary text-primary-foreground flex items-center justify-center font-mono text-[9px] font-bold rounded-sm">
                 CM
@@ -295,23 +351,21 @@ const Index = () => {
               <span className="font-sans text-sm font-medium">
                 {activeSession.uploaded_file_name || "New Session"}
               </span>
-              {!activeSession.uploaded_file_name && (
-                <label className="ml-auto font-sans text-[11px] font-medium cursor-pointer bg-secondary px-3 py-1.5 rounded-sm hover:bg-accent transition-colors">
-                  Upload .json
-                  <input
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleFileUpload(f);
-                    }}
-                  />
-                </label>
-              )}
+              <label className="ml-auto font-sans text-[11px] font-medium cursor-pointer bg-secondary px-3 py-1.5 rounded-sm hover:bg-accent transition-colors">
+                {activeSession.uploaded_file_name ? "Replace .json" : "Upload .json"}
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.currentTarget.value = "";
+                    if (file) handleFileUpload(file);
+                  }}
+                />
+              </label>
             </div>
 
-            {/* Chat Feed */}
             <div ref={feedRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
               {!hasMessages && (
                 <div className="flex items-center justify-center h-full">
@@ -324,7 +378,14 @@ const Index = () => {
               {loading && <LoadingIndicator />}
             </div>
 
-            <ChatInput onSend={handleSend} disabled={loading} />
+            <ChatInput
+              onSend={(text) => {
+                if (activeSession) {
+                  runQuery(activeSession, text);
+                }
+              }}
+              disabled={loading}
+            />
           </>
         )}
       </main>

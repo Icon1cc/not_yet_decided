@@ -4,6 +4,7 @@ import yaml
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+from matching_utils import extract_product_signals
 from models import SourceMatch, Submission
 from retrieval.exact_match import exact_match
 from retrieval.enrichment import enrich_products
@@ -58,13 +59,13 @@ def main():
         qdrant_cfg["collection"],
         qdrant_cfg["url"],
         qdrant_cfg["embedding_model"],
-        os.environ["OPENROUTER_API_KEY"],
+        os.environ.get("OPENROUTER_API_KEY", ""),
     )
     targets = retriever.fetch_all(qdrant_cfg["category_filter"])
     print(f"Fetched {len(targets)} target products from Qdrant")
 
     print("\nEnriching source products...")
-    sources = enrich_products(sources, os.environ["OPENROUTER_API_KEY"])
+    sources = enrich_products(sources, os.environ.get("OPENROUTER_API_KEY", ""))
     print(f"Source product types: { {s['reference']: s.get('product_type') for s in sources} }")
 
     # ── Phase 1: retrieval (fast) ─────────────────────────────────────────────
@@ -77,10 +78,34 @@ def main():
         exact_hits = exact_match(source, targets, exact_cfg["columns"], exact_cfg["threshold"])
 
         terms = expand_query(source, llm_model)
+        price_factor = qdrant_cfg.get("price_range_factor")
+        price = source.get("price_eur")
+        price_range = None
+        if price_factor is not None and isinstance(price, (int, float)) and price > 0:
+            price_range = (round(price * (1 - price_factor), 2), round(price * (1 + price_factor), 2))
+
+        size_delta = qdrant_cfg.get("size_range_delta")
+        size_range = None
+        size_unit = source.get("size_unit")
+        size_value = source.get("size")
+        source_signals = extract_product_signals(source)
+        if size_value is None and source_signals.screen_size_inch is not None:
+            size_value = source_signals.screen_size_inch
+            size_unit = "Zoll"
+        if size_delta is not None and isinstance(size_value, (int, float)):
+            size_range = (
+                max(0.0, round(size_value - size_delta, 2)),
+                round(size_value + size_delta, 2),
+            )
+
         bm25_hits = retriever.retrieve_multi(
             terms,
             top_k_per_term=qdrant_cfg["top_k_per_term"],
             category=qdrant_cfg["category_filter"],
+            product_type=source.get("product_type"),
+            price_range=price_range,
+            size_range=size_range,
+            size_unit=size_unit,
             min_score=qdrant_cfg["min_score"],
         )
 

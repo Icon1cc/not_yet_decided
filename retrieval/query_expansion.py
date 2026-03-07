@@ -1,5 +1,14 @@
 import os
+import sys
+from pathlib import Path
+
 import requests
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from matching_utils import build_deterministic_query_terms
 from prompts import EXPANSION_SYSTEM, build_expansion_prompt
 
 
@@ -25,12 +34,23 @@ def expand_query(source: dict, model: str, max_terms: int = 6) -> list[str]:
     LLM extracts up to max_terms discriminative search terms from the source product.
     Returns list of terms, most discriminative first.
     """
+    base_terms = build_deterministic_query_terms(source, max_terms=max_terms)
+
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        return base_terms
+
     prompt = build_expansion_prompt(source)
-    response = _call_openrouter(EXPANSION_SYSTEM, prompt, model)
-    terms = []
+    try:
+        response = _call_openrouter(EXPANSION_SYSTEM, prompt, model)
+    except Exception:
+        return base_terms
+
+    terms = list(base_terms)
+    seen = {term.lower() for term in terms}
     for line in response.splitlines():
         term = line.strip().lstrip("-•*→").strip()
-        if term:
+        if term and term.lower() not in seen:
             terms.append(term)
-    assert terms, f"Query expansion returned no terms for {source.get('reference')}: {response!r}"
+            seen.add(term.lower())
+
     return terms[:max_terms]

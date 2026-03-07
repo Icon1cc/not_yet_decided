@@ -33,9 +33,10 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
     );
   }
 
-  const products = tryParseProducts(message.content);
+  const products = message.cards || tryParseProducts(message.content);
+  const submission = message.submission;
 
-  if (products) {
+  if (products && products.length > 0) {
     return (
       <div className="animate-fade-in">
         <div className="flex items-center gap-2.5 mb-3">
@@ -50,6 +51,32 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
           {products.map((p: any, i: number) => (
             <ProductCard key={i} product={p} />
           ))}
+        </div>
+        {submission && (
+          <details className="ml-9 mt-4 border border-border rounded-sm bg-background">
+            <summary className="cursor-pointer font-mono text-xs uppercase tracking-wider px-3 py-2 bg-secondary">
+              Submission JSON (scoring format)
+            </summary>
+            <pre className="text-xs font-mono whitespace-pre-wrap break-all p-3 max-h-80 overflow-auto">
+              {JSON.stringify(submission, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+    );
+  }
+
+  if (submission && submission.length > 0) {
+    return (
+      <div className="flex justify-start gap-2.5 animate-fade-in">
+        <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+          <Bot className="w-3.5 h-3.5" />
+        </div>
+        <div className="chat-bubble-ai w-full max-w-[88%]">
+          <p className="text-sm mb-2">{message.content}</p>
+          <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+            {JSON.stringify(submission, null, 2)}
+          </pre>
         </div>
       </div>
     );
