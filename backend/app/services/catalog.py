@@ -8,6 +8,7 @@ Handles query parsing, source selection, and product matching.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
