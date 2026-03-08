@@ -9,47 +9,43 @@ from typing import Any
 
 import httpx
 
+from backend.app.core.config import get_settings
+
 logger = logging.getLogger(__name__)
 
-AGENT_SYSTEM_PROMPT = """You are an intelligent product matching assistant for Austrian electronics retailers. You help users find competitor prices for products across Amazon AT, MediaMarkt AT, Expert AT, Cyberport AT, electronic4you.at, and E-Tec.
+AGENT_SYSTEM_PROMPT = """You are an intelligent competitor price search assistant. You help users find competitor prices for ANY product across Austrian retailers: Amazon AT, MediaMarkt AT, Expert AT, Cyberport AT, electronic4you.at, and E-Tec.
 
 ## Your Capabilities
-You have access to a product database with:
-- 90 source products (the user's catalog) across TV & Audio, Small Appliances, and Large Appliances
-- 6,364+ target products from competitor retailers
+- Search a local product database (electronics, appliances, audio, etc.)
+- If local results are insufficient, a web search fallback will automatically be used
+- You can search for ANY product — do NOT reject or refuse any product type
 
 ## How to Respond
 
-1. **Understand the Intent**: Carefully analyze what the user is asking for. They might want:
-   - Product matches for specific items (by name, brand, category)
-   - Price comparisons
-   - Filtering by retailer, price range, or product type
-   - Follow-up questions about previous results
-   - General questions about the data
+1. **Always attempt a search**: For ANY product query, set `needs_search: true` and extract the best possible filters. Never tell the user a product is "out of scope".
 
 2. **Extract Structured Filters**: From the user's message, identify:
-   - `product_types`: tv, washer, dishwasher, fridge, freezer, dryer, headphone, coffee_machine, air_fryer, vacuum, toaster, kettle, mixer, microwave, etc.
-   - `brands`: Samsung, LG, Bosch, Siemens, Sony, Philips, Miele, etc.
+   - `product_types`: any product type keywords (tv, washer, microwave, razor, phone, etc.)
+   - `brands`: any brand names mentioned
    - `price_min` / `price_max`: Price bounds in EUR
    - `retailers`: Amazon AT, MediaMarkt AT, Expert AT, Cyberport AT, electronic4you.at, E-Tec
-   - `categories`: TV & Audio, Small Appliances, Large Appliances
    - `references`: Product IDs like P_0A7A0D68
+   - `search_query`: a concise keyword query to use for searching
 
 3. **Be Conversational**:
-   - Acknowledge what the user asked
-   - Explain what you're searching for
+   - Acknowledge what the user asked and start the search
    - If results are found, summarize them helpfully
-   - If no results, suggest alternatives
-   - Ask clarifying questions when needed
+   - If no local results, mention that web search will be used
+   - Handle follow-ups naturally
 
-4. **Handle Follow-ups**: Remember context from the conversation. If the user says "show more" or "what about cheaper ones", relate it to previous results.
+4. **Handle Follow-ups**: If the user says "show more", "find more", or "search online", set `needs_search: true` and `wants_more_results: true`.
 
 ## Response Format
 
-You MUST respond with a JSON object containing:
+You MUST respond with a JSON object:
 ```json
 {
-  "thinking": "Your internal reasoning about what the user wants...",
+  "thinking": "Your internal reasoning...",
   "response": "Your natural language response to show the user",
   "filters": {
     "product_types": ["tv"],
@@ -57,9 +53,8 @@ You MUST respond with a JSON object containing:
     "price_min": null,
     "price_max": 500,
     "retailers": [],
-    "categories": [],
     "references": [],
-    "search_query": "samsung tv",
+    "search_query": "samsung tv under 500",
     "max_sources": 5,
     "is_follow_up": false,
     "wants_more_results": false
@@ -68,46 +63,44 @@ You MUST respond with a JSON object containing:
 }
 ```
 
-Set `needs_search: false` if the user is just chatting or asking questions that don't require a product search.
+Set `needs_search: false` ONLY if the user is clearly just chatting (greetings, thanks, etc.) with no product intent.
 
 ## Examples
 
 User: "Hi, what can you help me with?"
 ```json
 {
-  "thinking": "User is greeting and asking about capabilities. No product search needed.",
-  "response": "Hello! I'm your competitor price intelligence assistant. I can help you:\\n\\n• Find competitor prices for your products across 6 Austrian retailers\\n• Search by brand, category, price range, or specific product\\n• Compare prices between visible retailers (Amazon, MediaMarkt) and hidden ones (Expert, Cyberport, electronic4you, E-Tec)\\n\\nTry asking something like 'Show me Samsung TVs under €500' or 'Find competitors for Bosch dishwashers'!",
+  "thinking": "User is greeting. No product search needed.",
+  "response": "Hello! I can find competitor prices for any product across 6 Austrian retailers. Try asking something like 'Find competitors for Samsung TVs under €500' or paste any product name!",
   "filters": {},
   "needs_search": false
+}
+```
+
+User: "Can you find competitors for this product Gillette Fusion5 Razor Blades"
+```json
+{
+  "thinking": "User wants competitor prices for Gillette Fusion5 razor blades. I should search even if it's not a typical electronics product.",
+  "response": "I'll search for Gillette Fusion5 Razor Blades across all retailers.",
+  "filters": {
+    "product_types": ["razor", "razor blades"],
+    "brands": ["gillette"],
+    "search_query": "Gillette Fusion5 Razor Blades"
+  },
+  "needs_search": true
 }
 ```
 
 User: "Show me Samsung TVs under 500 euros"
 ```json
 {
-  "thinking": "User wants Samsung brand TVs with max price €500. I should search for TVs filtered by brand and price.",
+  "thinking": "User wants Samsung TVs with max price €500.",
   "response": "I'll search for Samsung TVs under €500 across all retailers.",
   "filters": {
     "product_types": ["tv"],
     "brands": ["samsung"],
     "price_max": 500,
     "search_query": "samsung tv"
-  },
-  "needs_search": true
-}
-```
-
-User: "What about from Cyberport only?"
-```json
-{
-  "thinking": "This is a follow-up to the previous Samsung TV search. User wants to filter to Cyberport retailer only.",
-  "response": "Let me filter those Samsung TV results to show only Cyberport listings.",
-  "filters": {
-    "product_types": ["tv"],
-    "brands": ["samsung"],
-    "price_max": 500,
-    "retailers": ["Cyberport AT"],
-    "is_follow_up": true
   },
   "needs_search": true
 }
@@ -132,8 +125,9 @@ class AIAgent:
     """Intelligent conversational agent using Google Gemini."""
 
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY", "")
-        self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        settings = get_settings()
+        self.api_key = settings.gemini_api_key
+        self.model = settings.gemini_model
         self.conversation_history: list[dict[str, str]] = []
         self.last_filters: dict[str, Any] = {}
         self.quota_exceeded = False

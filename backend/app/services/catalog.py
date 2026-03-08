@@ -617,6 +617,11 @@ class CatalogMatcher:
         if selected:
             return selected
 
+        # If the best score is too low, the query doesn't match anything in the catalog.
+        # Return empty so the Brave web fallback can be used instead.
+        if scored and scored[0][0] < 0.05:
+            return []
+
         return [source for _, source in scored[:max_sources]]
 
     # ── Target Matching ───────────────────────────────────────────────────────
@@ -858,7 +863,7 @@ class CatalogMatcher:
         additional_only = follow_up_expand
         excluded_previous_links = 0
 
-        # Fallback if no targets
+        # Fallback if no targets at all
         if not self.targets:
             fallback_reason = "no_local_target_files"
             fallback_competitors = self._search_brave(effective_query, max_competitors_per_source)
@@ -936,6 +941,29 @@ class CatalogMatcher:
                     "source_reference": source_ref,
                     "competitors": competitors,
                 })
+
+        # Brave fallback when local matching found nothing
+        if not fallback_used and matched_sources == 0:
+            fallback_reason = "no_local_matches"
+            fallback_competitors = self._search_brave(effective_query, max_competitors_per_source)
+            if fallback_competitors:
+                fallback_used = True
+                source_ref = str(selected_sources[0].get("reference") or "") if selected_sources else "WEB_QUERY"
+                submission = [{"source_reference": source_ref, "competitors": fallback_competitors}]
+                cards = [
+                    {
+                        "reference": c["reference"],
+                        "source_reference": source_ref,
+                        "name": c["competitor_product_name"],
+                        "retailer": c["competitor_retailer"],
+                        "price_eur": c["competitor_price"],
+                        "image_url": None,
+                        "url": c["competitor_url"],
+                    }
+                    for c in fallback_competitors
+                ]
+                matched_sources = 1
+                hidden_links += len(fallback_competitors)
 
         # Persist output
         output_path: str | None = None
