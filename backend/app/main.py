@@ -31,10 +31,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize matcher
     logger.info("Starting Competitor Matcher API...")
     matcher = get_matcher()
-    logger.info(
-        f"Loaded {len(matcher.default_sources)} sources, "
-        f"{len(matcher.targets)} targets"
-    )
+    logger.info(f"Loaded {len(matcher.default_sources)} source products from DB.")
     yield
     # Shutdown
     logger.info("Shutting down Competitor Matcher API...")
