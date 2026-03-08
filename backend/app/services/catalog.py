@@ -8,7 +8,6 @@ Handles query parsing, source selection, and product matching.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import re
@@ -17,7 +16,6 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from pathlib import Path
 from typing import Any
 
 from backend.app.core.config import get_settings
@@ -138,144 +136,17 @@ class CatalogMatcher:
     Features:
     - Natural language query parsing
     - Multi-signal product matching (EAN, model, brand, name)
-    - Dynamic data refresh on each query
+    - Supabase-backed storage with server-side pre-filtering
     - Follow-up query context handling
     - Web search fallback when local data unavailable
     """
 
-    def __init__(self, data_dir: Path | None = None, output_dir: Path | None = None):
-        """Initialize the catalog matcher."""
-        settings = get_settings()
-        self.data_dir = data_dir or settings.data_dir
-        self.output_dir = output_dir or settings.output_dir
-        self.default_sources = self._load_default_sources()
-        self.target_files: list[tuple[Path, bool]] = []
-        self.targets: list[TargetRecord] = []
-        self._targets_signature: tuple[tuple[str, bool, int, int], ...] = ()
-        self._refresh_targets()
+    def __init__(self) -> None:
+        from backend.app.db.repository import ProductRepository
 
-    def _load_json_rows(self, path: Path) -> list[dict[str, Any]]:
-        """Load JSON array from file."""
-        if not path.exists():
-            return []
-        try:
-            with open(path, encoding="utf-8") as f:
-                rows = json.load(f)
-            return rows if isinstance(rows, list) else []
-        except (json.JSONDecodeError, IOError) as e:
-            logger.warning(f"Failed to load {path}: {e}")
-            return []
-
-    def _load_default_sources(self) -> list[dict[str, Any]]:
-        """Load default source products from data directory."""
-        rows: list[dict[str, Any]] = []
-        seen: set[str] = set()
-
-        for path in sorted(self.data_dir.glob("source_products_*.json")):
-            category = path.stem.replace("source_products_", "").replace("_", " ").strip()
-            category = category.replace("tv ", "TV ").replace("audio", "Audio")
-            for row in self._load_json_rows(path):
-                ref = str(row.get("reference") or "").strip()
-                if not ref or ref in seen:
-                    continue
-                seen.add(ref)
-                source = dict(row)
-                source.setdefault("category", category)
-                rows.append(source)
-
-        logger.info(f"Loaded {len(rows)} default source products")
-        return rows
-
-    def _target_files(self) -> list[tuple[Path, bool]]:
-        """Get list of target files (visible and hidden)."""
-        files: list[tuple[Path, bool]] = []
-
-        # Visible pools from data/
-        for path in sorted(self.data_dir.glob("target_pool_*.json")):
-            files.append((path, True))
-
-        # Hidden pools: prefer output/ over data/
-        hidden_by_name: dict[str, Path] = {}
-        for base in (self.output_dir, self.data_dir):
-            for path in sorted(base.glob("matched_*.json")):
-                if path.name == "matched_ui_output.json":
-                    continue
-                hidden_by_name.setdefault(path.name, path)
-
-        for name in sorted(hidden_by_name):
-            files.append((hidden_by_name[name], False))
-
-        return files
-
-    def _target_signature(self, files: list[tuple[Path, bool]]) -> tuple[tuple[str, bool, int, int], ...]:
-        """Generate signature for target files to detect changes."""
-        signature: list[tuple[str, bool, int, int]] = []
-        for path, visible in files:
-            try:
-                stat = path.stat()
-                signature.append((str(path), visible, int(stat.st_mtime_ns), stat.st_size))
-            except OSError:
-                signature.append((str(path), visible, 0, 0))
-        signature.sort(key=lambda item: item[0])
-        return tuple(signature)
-
-    def _refresh_targets(self) -> None:
-        """Refresh targets if files have changed."""
-        files = self._target_files()
-        signature = self._target_signature(files)
-        if signature == self._targets_signature:
-            return
-        self.target_files = files
-        self.targets = self._load_targets(files)
-        self._targets_signature = signature
-        logger.info(f"Refreshed {len(self.targets)} target products from {len(files)} files")
-
-    def _is_product_row(self, row: Any) -> bool:
-        """Check if row is a valid product record."""
-        if not isinstance(row, dict):
-            return False
-        if "source_reference" in row and "competitors" in row and "name" not in row:
-            return False
-        if not row.get("reference"):
-            return False
-        if not row.get("name"):
-            return False
-        return True
-
-    def _load_targets(self, files: list[tuple[Path, bool]]) -> list[TargetRecord]:
-        """Load all target products from files."""
-        targets: list[TargetRecord] = []
-
-        for path, visible in files:
-            category_norm = ""
-            if visible and path.stem.startswith("target_pool_"):
-                cat = path.stem.replace("target_pool_", "").replace("_", " ").strip()
-                category_norm = normalize_text(cat)
-
-            for row in self._load_json_rows(path):
-                if not self._is_product_row(row):
-                    continue
-                product = dict(row)
-                product.setdefault("reference", "")
-                product.setdefault("retailer", "")
-                product.setdefault("name", "")
-                product.setdefault("url", None)
-                product.setdefault("image_url", None)
-                product.setdefault("price_eur", None)
-                if visible and not product.get("category"):
-                    product["category"] = path.stem.replace("target_pool_", "").replace("_", " ").strip()
-
-                targets.append(
-                    TargetRecord(
-                        product=product,
-                        signals=extract_product_signals(product),
-                        visible=visible,
-                        category_norm=category_norm,
-                        canonical_url=canonical_url(product.get("url")),
-                    )
-                )
-
-        return targets
+        self._repo = ProductRepository()
+        self.default_sources: list[dict[str, Any]] = self._repo.get_all_sources()
+        logger.info("CatalogMatcher ready – %d source products loaded.", len(self.default_sources))
 
     # ── Query Parsing ─────────────────────────────────────────────────────────
 
@@ -629,6 +500,7 @@ class CatalogMatcher:
     def _match_one_source(
         self,
         source: dict[str, Any],
+        targets: list[TargetRecord],
         max_competitors: int,
         allowed_retailers: set[str],
         allowed_kinds: set[str],
@@ -645,7 +517,7 @@ class CatalogMatcher:
             return []
 
         scored: list[tuple[float, str, TargetRecord]] = []
-        for target in self.targets:
+        for target in targets:
             retailer = str(target.product.get("retailer") or "")
             if allowed_retailers and retailer not in allowed_retailers:
                 continue
@@ -801,7 +673,6 @@ class CatalogMatcher:
         Returns:
             (submission, cards, stats) tuple
         """
-        self._refresh_targets()
 
         # Parse query signals
         current_signals = self._structured_query_signal(query)
@@ -852,6 +723,24 @@ class CatalogMatcher:
                 source_map[ref] for ref in previous_source_refs if ref in source_map
             ]
 
+        # Determine the category to pass to the DB (use the first selected source's category)
+        query_category: str | None = None
+        if selected_sources:
+            query_category = selected_sources[0].get("category") or None
+
+        # Fetch candidate targets from DB once per request (server-side pre-filtering)
+        target_candidates = self._repo.get_target_candidates(
+            category=query_category,
+            kinds=allowed_kinds or None,
+            retailers=allowed_retailers or None,
+            min_price=min_price,
+            max_price=max_price,
+        )
+        logger.debug(
+            "DB returned %d candidate targets (category=%s, kinds=%s).",
+            len(target_candidates), query_category, allowed_kinds,
+        )
+
         # Execute matching
         submission: list[dict[str, Any]] = []
         cards: list[dict[str, Any]] = []
@@ -864,7 +753,7 @@ class CatalogMatcher:
         excluded_previous_links = 0
 
         # Fallback if no targets at all
-        if not self.targets:
+        if not target_candidates:
             fallback_reason = "no_local_target_files"
             fallback_competitors = self._search_brave(effective_query, max_competitors_per_source)
             if fallback_competitors:
@@ -895,6 +784,7 @@ class CatalogMatcher:
 
                 matched = self._match_one_source(
                     source,
+                    target_candidates,
                     max_competitors=max(max_competitors_per_source, 24) if additional_only else max_competitors_per_source,
                     allowed_retailers=allowed_retailers,
                     allowed_kinds=allowed_kinds,
@@ -965,19 +855,6 @@ class CatalogMatcher:
                 matched_sources = 1
                 hidden_links += len(fallback_competitors)
 
-        # Persist output
-        output_path: str | None = None
-        if persist_output:
-            output_file = self.data_dir / "matched_ui_output.json"
-            tmp_file = output_file.with_suffix(".tmp")
-            with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(submission, f, ensure_ascii=False, indent=2)
-            tmp_file.replace(output_file)
-            try:
-                output_path = str(output_file.relative_to(get_settings().data_dir.parent))
-            except ValueError:
-                output_path = str(output_file)
-
         stats = {
             "query": query,
             "effective_query": effective_query,
@@ -990,14 +867,14 @@ class CatalogMatcher:
             "kind_filter": sorted(allowed_kinds),
             "anchor_tokens": sorted(anchor_tokens),
             "price_filter": {"min": min_price, "max": max_price},
-            "target_files_loaded": [str(path.name) for path, _ in self.target_files],
+            "candidates_fetched": len(target_candidates),
             "follow_up_expand": follow_up_expand,
             "additional_only": additional_only,
             "previous_source_refs": previous_source_refs,
             "excluded_previous_links": excluded_previous_links,
             "fallback_used": fallback_used,
             "fallback_reason": fallback_reason,
-            "output_file": output_path,
+            "output_file": None,
         }
 
         return submission, cards, stats

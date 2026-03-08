@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default_factory=lambda: get_project_root() / "data")
     output_dir: Path = Field(default_factory=lambda: get_project_root() / "output")
 
+    database_url: str = Field(default="")
+
     gemini_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-2.5-flash")
     brave_api_key: str = Field(default="")
