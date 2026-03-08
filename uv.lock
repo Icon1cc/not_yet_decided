@@ -214,7 +214,7 @@ wheels = [
 [[package]]
 name = "competitor-matcher"
 version = "1.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "beautifulsoup4" },
