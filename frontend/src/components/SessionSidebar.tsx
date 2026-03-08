@@ -1,4 +1,4 @@
-import { Plus, FileJson, Trash2, MessageSquare } from "lucide-react";
+import { Plus, FileJson, Trash2, MessageSquare, X } from "lucide-react";
 import type { Session } from "@/lib/db";
 
 interface SessionSidebarProps {
@@ -8,6 +8,8 @@ interface SessionSidebarProps {
   onNew: () => void;
   onDelete: (id: string) => void;
   onHome: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export function SessionSidebar({
@@ -17,25 +19,37 @@ export function SessionSidebar({
   onNew,
   onDelete,
   onHome,
+  isOpen = false,
+  onClose,
 }: SessionSidebarProps) {
   return (
-    <aside className="w-72 shrink-0 border-r border-border h-screen flex flex-col bg-sidebar">
+    <aside className={`fixed inset-y-0 left-0 z-40 w-72 shrink-0 flex flex-col bg-sidebar border-r border-border h-screen transition-transform duration-200 md:relative md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
       {/* Logo */}
-      <div
-        onClick={onHome}
-        className="px-5 py-5 flex items-center gap-3 cursor-pointer hover:bg-sidebar-accent transition-colors border-b border-border"
-      >
-        <div className="w-9 h-9 bg-primary text-primary-foreground flex items-center justify-center font-mono text-sm font-bold tracking-tight rounded-sm shrink-0">
-          CM
+      <div className="px-5 py-5 flex items-center gap-3 border-b border-border">
+        <div
+          onClick={onHome}
+          className="flex items-center gap-3 cursor-pointer hover:bg-sidebar-accent transition-colors flex-1 min-w-0 rounded-sm"
+        >
+          <div className="w-9 h-9 bg-primary text-primary-foreground flex items-center justify-center font-mono text-sm font-bold tracking-tight rounded-sm shrink-0">
+            CM
+          </div>
+          <div>
+            <p className="font-mono text-xs font-bold uppercase tracking-widest leading-tight">
+              Competitor
+            </p>
+            <p className="font-mono text-xs font-bold uppercase tracking-widest leading-tight">
+              Matcher
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="font-mono text-xs font-bold uppercase tracking-widest leading-tight">
-            Competitor
-          </p>
-          <p className="font-mono text-xs font-bold uppercase tracking-widest leading-tight">
-            Matcher
-          </p>
-        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden p-1 hover:bg-sidebar-accent rounded-sm transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* New Chat */}

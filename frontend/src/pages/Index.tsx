@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search } from "lucide-react";
+import { Search, Menu } from "lucide-react";
 
 import { SessionSidebar } from "@/components/SessionSidebar";
 import { DropZone } from "@/components/DropZone";
@@ -78,6 +78,7 @@ const Index = () => {
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -249,6 +250,12 @@ const Index = () => {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       {showAbout && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40"
@@ -267,9 +274,22 @@ const Index = () => {
             <p className="font-sans text-sm leading-relaxed text-foreground mb-3">
               Competitor Matcher is an AI-powered product intelligence platform that finds, validates, and formats competitor product links for both visible and hidden retailers.
             </p>
-            <p className="font-sans text-sm leading-relaxed text-muted-foreground mb-5">
+            <p className="font-sans text-sm leading-relaxed text-muted-foreground mb-4">
               Output is generated directly in scoring-ready format (`source_reference` + `reference` / `competitor_url`) and persisted with chat history per session.
             </p>
+            <div className="border-t border-border pt-4 mb-5">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">Team</p>
+              <div className="space-y-2.5">
+                <div>
+                  <p className="font-sans text-sm font-medium">Rishabh Tiwari</p>
+                  <p className="font-sans text-xs text-muted-foreground">rishtiwari98@gmail.com</p>
+                </div>
+                <div>
+                  <p className="font-sans text-sm font-medium">Florian Sprick</p>
+                  <p className="font-sans text-xs text-muted-foreground">florian.sprick@hotmail.com</p>
+                </div>
+              </div>
+            </div>
             <button
               onClick={() => setShowAbout(false)}
               className="w-full bg-primary text-primary-foreground py-2.5 font-sans text-xs font-semibold uppercase tracking-wider rounded-sm hover:opacity-90 transition-opacity"
@@ -283,15 +303,23 @@ const Index = () => {
       <SessionSidebar
         sessions={sessions}
         activeId={activeSession?.id || null}
-        onSelect={handleSelect}
-        onNew={handleNew}
+        onSelect={(id) => { handleSelect(id); setSidebarOpen(false); }}
+        onNew={() => { handleNew(); setSidebarOpen(false); }}
         onDelete={handleDelete}
-        onHome={() => setActiveSession(null)}
+        onHome={() => { setActiveSession(null); setSidebarOpen(false); }}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <main className="flex-1 flex flex-col h-screen min-w-0 bg-background">
         {!activeSession ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="flex-1 flex flex-col items-center justify-center p-8 relative">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden absolute top-4 left-4 p-2 hover:bg-secondary rounded-sm transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <div className="w-14 h-14 bg-primary text-primary-foreground flex items-center justify-center font-mono text-xl font-bold rounded-sm mb-6">
               CM
             </div>
@@ -310,7 +338,7 @@ const Index = () => {
               <p className="font-sans text-[10px] font-semibold uppercase tracking-widest text-muted-foreground text-center mb-3">
                 Or try asking
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {QUICK_SUGGESTIONS.map((suggestion) => (
                   <button
                     key={suggestion}
@@ -344,7 +372,13 @@ const Index = () => {
           </div>
         ) : (
           <>
-            <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0 bg-background">
+            <div className="border-b border-border px-4 py-3 flex items-center gap-3 shrink-0 bg-background">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden p-1 hover:bg-secondary rounded-sm transition-colors"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
               <div className="w-6 h-6 bg-primary text-primary-foreground flex items-center justify-center font-mono text-[9px] font-bold rounded-sm">
                 CM
               </div>
