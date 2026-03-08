@@ -133,20 +133,16 @@ class CatalogMatcher:
     """
     Main service for matching source products against competitor catalogs.
 
-    Features:
-    - Natural language query parsing
-    - Multi-signal product matching (EAN, model, brand, name)
-    - Supabase-backed storage with server-side pre-filtering
-    - Follow-up query context handling
-    - Web search fallback when local data unavailable
+    Reads all data from PostgreSQL (DATABASE_URL required).
+    Sources are loaded once at startup; targets are fetched per request
+    with server-side pre-filtering so nothing is held in RAM.
     """
 
     def __init__(self) -> None:
         from backend.app.db.repository import ProductRepository
-
         self._repo = ProductRepository()
         self.default_sources: list[dict[str, Any]] = self._repo.get_all_sources()
-        logger.info("CatalogMatcher ready – %d source products loaded.", len(self.default_sources))
+        logger.info("CatalogMatcher ready – %d source products loaded from DB.", len(self.default_sources))
 
     # ── Query Parsing ─────────────────────────────────────────────────────────
 
