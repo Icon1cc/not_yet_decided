@@ -78,11 +78,13 @@ function getApiEndpoints(): string[] {
   const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
   const normalizedBase = envBase ? envBase.replace(/\/+$/, "") : "";
 
+  // For Vercel deployment, the API is at /api/v1
+  // For local development, try multiple options
   const candidates = [
     normalizedBase ? `${normalizedBase}/api/v1` : "",
-    "/api/v1",
-    "http://127.0.0.1:8000/api/v1",
-    "http://localhost:8000/api/v1",
+    "/api/v1",  // Vercel deployment
+    "http://127.0.0.1:8000/api/v1",  // Local development
+    "http://localhost:8000/api/v1",  // Local development alternative
   ].filter(Boolean);
 
   return Array.from(new Set(candidates));

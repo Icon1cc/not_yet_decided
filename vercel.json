@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/app/main.py",
+      "src": "api/*.py",
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "50mb",
@@ -19,16 +19,20 @@
   ],
   "routes": [
     {
-      "src": "/api/v1/(.*)",
-      "dest": "backend/app/main.py"
+      "src": "/api/v1/health",
+      "dest": "/api/health.py"
+    },
+    {
+      "src": "/api/v1/chat",
+      "dest": "/api/chat.py"
+    },
+    {
+      "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|svg|woff|woff2|ttf|eot)$)",
+      "dest": "/frontend/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "frontend/$1"
+      "dest": "/frontend/index.html"
     }
-  ],
-  "env": {
-    "OPENROUTER_API_KEY": "@openrouter_api_key",
-    "BRAVE_API_KEY": "@brave_api_key"
-  }
+  ]
 }

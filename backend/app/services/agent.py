@@ -1,8 +1,4 @@
-"""
-AI Agent Service using OpenRouter/Claude.
-
-Provides intelligent, conversational product matching with reasoning capabilities.
-"""
+"""AI Agent Service using Google Gemini."""
 
 from __future__ import annotations
 
@@ -13,11 +9,8 @@ from typing import Any
 
 import httpx
 
-from backend.app.core.config import get_settings
-
 logger = logging.getLogger(__name__)
 
-# System prompt for the agent
 AGENT_SYSTEM_PROMPT = """You are an intelligent product matching assistant for Austrian electronics retailers. You help users find competitor prices for products across Amazon AT, MediaMarkt AT, Expert AT, Cyberport AT, electronic4you.at, and E-Tec.
 
 ## Your Capabilities
@@ -83,7 +76,7 @@ User: "Hi, what can you help me with?"
 ```json
 {
   "thinking": "User is greeting and asking about capabilities. No product search needed.",
-  "response": "Hello! I'm your competitor price intelligence assistant. I can help you:\\n\\n• Find competitor prices for your products across 6 Austrian retailers\\n• Search by brand, category, price range, or specific product\\n• Compare prices between visible retailers (Amazon, MediaMarkt) and hidden ones (Expert, Cyberport, electronic4you, E-Tec)\\n\\nTry asking something like \\"Show me Samsung TVs under €500\\" or \\"Find competitors for Bosch dishwashers\\"!",
+  "response": "Hello! I'm your competitor price intelligence assistant. I can help you:\\n\\n• Find competitor prices for your products across 6 Austrian retailers\\n• Search by brand, category, price range, or specific product\\n• Compare prices between visible retailers (Amazon, MediaMarkt) and hidden ones (Expert, Cyberport, electronic4you, E-Tec)\\n\\nTry asking something like 'Show me Samsung TVs under €500' or 'Find competitors for Bosch dishwashers'!",
   "filters": {},
   "needs_search": false
 }
@@ -120,84 +113,83 @@ User: "What about from Cyberport only?"
 }
 ```
 
-User: "Show me all washing machines"
-```json
-{
-  "thinking": "User wants washing machines. This is the 'washer' product type in Large Appliances category.",
-  "response": "I'll find all washing machines and their competitor prices for you.",
-  "filters": {
-    "product_types": ["washer"],
-    "categories": ["Large Appliances"],
-    "search_query": "washing machine",
-    "max_sources": 10
-  },
-  "needs_search": true
-}
-```
-
 Always respond with valid JSON only. No markdown code blocks, just the raw JSON object."""
 
 
-class AIAgent:
-    """
-    Intelligent conversational agent using Claude via OpenRouter.
+class QuotaExceededError(Exception):
+    pass
 
-    Provides natural conversation flow with product search capabilities.
-    """
+
+class APINotEnabledError(Exception):
+    pass
+
+
+class APIError(Exception):
+    pass
+
+
+class AIAgent:
+    """Intelligent conversational agent using Google Gemini."""
 
     def __init__(self):
-        """Initialize the AI agent."""
-        settings = get_settings()
-        self.api_key = settings.openrouter_api_key or os.getenv("OPENROUTER_API_KEY", "")
-        self.base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self.model = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
+        self.api_key = os.getenv("GEMINI_API_KEY", "")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.conversation_history: list[dict[str, str]] = []
         self.last_filters: dict[str, Any] = {}
+        self.quota_exceeded = False
+        logger.info(f"AI Agent initialized: {'configured' if self.api_key else 'no API key'}")
 
     @property
     def is_configured(self) -> bool:
-        """Check if the agent is properly configured with an API key."""
         return bool(self.api_key)
 
-    def _call_llm(self, messages: list[dict[str, str]]) -> str:
-        """Call the LLM via OpenRouter."""
-        if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY not configured")
+    def _call_gemini(self, messages: list[dict[str, str]]) -> str:
+        contents = []
+        system_prompt = None
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://competitor-matcher.local",
-            "X-Title": "Competitor Matcher Agent",
-        }
+        for msg in messages:
+            if msg["role"] == "system":
+                system_prompt = msg["content"]
+            elif msg["role"] == "user":
+                content = msg["content"]
+                if system_prompt and not contents:
+                    content = f"{system_prompt}\n\n---\n\nUser message: {content}"
+                contents.append({"role": "user", "parts": [{"text": content}]})
+            elif msg["role"] == "assistant":
+                contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
 
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
         payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 2000,
+            "contents": contents,
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2000}
         }
 
-        try:
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                response.raise_for_status()
-                data = response.json()
-                return data["choices"][0]["message"]["content"]
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            raise
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(url, json=payload)
+
+            if response.status_code == 429:
+                self.quota_exceeded = True
+                raise QuotaExceededError("API quota exceeded. Please upgrade or recharge your credits.")
+
+            if response.status_code == 403:
+                error_data = response.json().get("error", {})
+                if "SERVICE_DISABLED" in str(error_data):
+                    raise APINotEnabledError("Gemini API is not enabled. Please enable it in Google Cloud Console.")
+                raise APIError(f"API access denied: {error_data.get('message', 'Unknown error')}")
+
+            response.raise_for_status()
+            data = response.json()
+
+            candidates = data.get("candidates", [])
+            if candidates:
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                if parts:
+                    return parts[0].get("text", "")
+
+            raise APIError("No response from Gemini")
 
     def _parse_agent_response(self, llm_output: str) -> dict[str, Any]:
-        """Parse the agent's JSON response."""
-        # Clean up potential markdown code blocks
         cleaned = llm_output.strip()
         if cleaned.startswith("```json"):
             cleaned = cleaned[7:]
@@ -211,7 +203,6 @@ class AIAgent:
             return json.loads(cleaned)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse agent response: {e}\nResponse: {llm_output}")
-            # Return a fallback response
             return {
                 "thinking": "Failed to parse response",
                 "response": "I apologize, but I had trouble processing that request. Could you please rephrase your question?",
@@ -224,133 +215,84 @@ class AIAgent:
         user_message: str,
         conversation_history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
-        """
-        Process a user message and return agent response with filters.
-
-        Args:
-            user_message: The user's input message
-            conversation_history: Optional list of previous messages
-
-        Returns:
-            Dict containing:
-            - thinking: Agent's reasoning (for debugging)
-            - response: Natural language response for the user
-            - filters: Extracted search filters
-            - needs_search: Whether to perform a product search
-        """
         if not self.is_configured:
             return {
                 "thinking": "No API key configured",
-                "response": "I'm running in basic mode without AI capabilities. I can still search for products - just tell me what you're looking for (e.g., 'Samsung TVs' or 'dishwashers under €500').",
-                "filters": self._extract_basic_filters(user_message),
-                "needs_search": True,
+                "response": "Gemini API key not configured. Please add GEMINI_API_KEY to your environment variables.",
+                "filters": {},
+                "needs_search": False,
+                "api_error": True,
             }
 
-        # Build messages for LLM
+        if self.quota_exceeded:
+            return {
+                "thinking": "API quota exceeded",
+                "response": "API credits exhausted. Please upgrade or recharge your Gemini API credits to continue using the AI assistant.",
+                "filters": {},
+                "needs_search": False,
+                "quota_exceeded": True,
+            }
+
         messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
 
-        # Add conversation history
         if conversation_history:
-            for msg in conversation_history[-10:]:  # Keep last 10 messages for context
+            for msg in conversation_history[-10:]:
                 messages.append(msg)
 
-        # Add current user message
         messages.append({"role": "user", "content": user_message})
 
-        # Call LLM
         try:
-            llm_response = self._call_llm(messages)
+            llm_response = self._call_gemini(messages)
             parsed = self._parse_agent_response(llm_response)
 
-            # Store filters for follow-up context
             if parsed.get("filters"):
                 self.last_filters = parsed["filters"]
 
             return parsed
 
-        except Exception as e:
-            logger.error(f"Agent processing failed: {e}")
-            # Fallback to basic extraction
+        except QuotaExceededError:
+            self.quota_exceeded = True
             return {
-                "thinking": f"LLM call failed: {e}",
-                "response": f"I'll search for that using basic matching.",
-                "filters": self._extract_basic_filters(user_message),
-                "needs_search": True,
+                "thinking": "API quota exceeded",
+                "response": "API credits exhausted. Please upgrade or recharge your Gemini API credits to continue using the AI assistant.",
+                "filters": {},
+                "needs_search": False,
+                "quota_exceeded": True,
             }
 
-    def _extract_basic_filters(self, query: str) -> dict[str, Any]:
-        """Extract basic filters without LLM (fallback)."""
-        import re
+        except APINotEnabledError:
+            return {
+                "thinking": "API not enabled",
+                "response": "The Gemini API needs to be enabled. Please visit Google Cloud Console to enable it.",
+                "filters": {},
+                "needs_search": False,
+                "api_error": True,
+            }
 
-        query_lower = query.lower()
-        filters: dict[str, Any] = {
-            "search_query": query,
-            "product_types": [],
-            "brands": [],
-            "retailers": [],
-            "categories": [],
-            "references": [],
-            "price_min": None,
-            "price_max": None,
-        }
-
-        # Product types
-        type_keywords = {
-            "tv": ["tv", "television", "fernseher"],
-            "washer": ["washing machine", "waschmaschine", "washer"],
-            "dishwasher": ["dishwasher", "geschirrspüler", "spülmaschine"],
-            "fridge": ["fridge", "refrigerator", "kühlschrank"],
-            "headphone": ["headphone", "kopfhörer", "earbuds"],
-            "vacuum": ["vacuum", "staubsauger"],
-        }
-        for ptype, keywords in type_keywords.items():
-            if any(kw in query_lower for kw in keywords):
-                filters["product_types"].append(ptype)
-
-        # Brands
-        brands = ["samsung", "lg", "bosch", "siemens", "sony", "philips", "miele", "panasonic"]
-        for brand in brands:
-            if brand in query_lower:
-                filters["brands"].append(brand)
-
-        # Price extraction
-        price_match = re.search(r"under\s*€?\s*(\d+)|below\s*€?\s*(\d+)|max\s*€?\s*(\d+)", query_lower)
-        if price_match:
-            filters["price_max"] = float(price_match.group(1) or price_match.group(2) or price_match.group(3))
-
-        # Reference extraction
-        ref_matches = re.findall(r"P_[A-Z0-9]{8}", query, re.IGNORECASE)
-        filters["references"] = [r.upper() for r in ref_matches]
-
-        return filters
+        except Exception as e:
+            logger.error(f"Agent processing failed: {e}")
+            return {
+                "thinking": f"API error: {e}",
+                "response": "Unable to process request. Please check your API configuration or try again later.",
+                "filters": {},
+                "needs_search": False,
+                "api_error": True,
+            }
 
     def build_result_response(
         self,
         agent_response: dict[str, Any],
         search_results: dict[str, Any],
     ) -> str:
-        """
-        Build a final response incorporating search results.
-
-        Args:
-            agent_response: The initial agent response
-            search_results: Results from the catalog matcher
-
-        Returns:
-            Natural language response with results summary
-        """
-        if not self.is_configured:
-            # Use the basic answer from the matcher
+        if not self.is_configured or self.quota_exceeded:
             return search_results.get("answer", agent_response.get("response", ""))
 
         stats = search_results.get("stats", {})
         submission = search_results.get("submission", [])
-
         total_links = stats.get("total_links", 0)
         matched_sources = stats.get("matched_sources", 0)
         selected_sources = stats.get("selected_sources", 0)
 
-        # Build context for LLM to generate final response
         result_context = f"""
 Based on the search, here are the results:
 - Sources searched: {selected_sources}
@@ -361,39 +303,34 @@ Based on the search, here are the results:
 
 Results by source product:
 """
-        for entry in submission[:5]:  # Limit to 5 for context
+        for entry in submission[:5]:
             source_ref = entry.get("source_reference", "")
             competitors = entry.get("competitors", [])
             result_context += f"\n{source_ref}: {len(competitors)} competitor(s)"
             for comp in competitors[:3]:
                 result_context += f"\n  - {comp.get('competitor_product_name', '')[:50]} ({comp.get('competitor_retailer', '')}) - €{comp.get('competitor_price', 'N/A')}"
 
-        # Generate conversational response with results
         try:
             messages = [
-                {"role": "system", "content": """You are a helpful product matching assistant.
-Given search results, provide a natural, conversational summary. Be concise but informative.
-Highlight key findings like best prices or notable matches.
-If no results were found, suggest alternatives.
-Do NOT output JSON - just write a natural response."""},
+                {"role": "system", "content": "You are a helpful product matching assistant. Given search results, provide a natural, conversational summary. Be concise but informative. Highlight key findings like best prices or notable matches. If no results were found, suggest alternatives. Do NOT output JSON - just write a natural response."},
                 {"role": "user", "content": f"User asked: {agent_response.get('response', '')}\n\n{result_context}\n\nProvide a helpful summary of these results."}
             ]
-
-            final_response = self._call_llm(messages)
+            final_response = self._call_gemini(messages)
             return final_response.strip()
+
+        except QuotaExceededError:
+            self.quota_exceeded = True
+            return "API credits exhausted. Results shown above. Please upgrade or recharge your credits for AI-powered summaries."
 
         except Exception as e:
             logger.error(f"Failed to generate result response: {e}")
-            # Fallback to basic answer
             return search_results.get("answer", agent_response.get("response", ""))
 
 
-# Global agent instance
 _agent: AIAgent | None = None
 
 
 def get_agent() -> AIAgent:
-    """Get or create the global agent instance."""
     global _agent
     if _agent is None:
         _agent = AIAgent()
