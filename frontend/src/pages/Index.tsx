@@ -313,7 +313,7 @@ const Index = () => {
 
       <main className="flex-1 flex flex-col h-screen min-w-0 bg-background">
         {!activeSession ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 relative">
+          <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-y-auto">
             <button
               onClick={() => setSidebarOpen(true)}
               className="md:hidden absolute top-4 left-4 p-2 hover:bg-secondary rounded-sm transition-colors"

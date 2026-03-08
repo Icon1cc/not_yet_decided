@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     output_dir: Path = Field(default_factory=lambda: get_project_root() / "output")
 
     gemini_api_key: str = Field(default="")
-    gemini_model: str = Field(default="gemini-2.0-flash")
+    gemini_model: str = Field(default="gemini-2.5-flash")
     brave_api_key: str = Field(default="")
 
     qdrant_url: str = Field(default="http://localhost:6333")
