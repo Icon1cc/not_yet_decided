@@ -1,17 +1,16 @@
+"""
+Qdrant indexing module for product vector storage.
+"""
+
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 from fastembed import SparseTextEmbedding
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from matching_utils import clean_specs_for_matching, extract_product_signals
 from qdrant_client import QdrantClient
+
+from backend.app.services.matching import clean_specs_for_matching, extract_product_signals
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -32,8 +31,8 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from retrieval.embeddings import embed_texts
-from retrieval.enrichment import enrich_products
+from backend.app.retrieval.embeddings import embed_texts
+from backend.app.retrieval.enrichment import enrich_products
 
 
 def product_to_chunk(product: dict) -> str:

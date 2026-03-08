@@ -1,7 +1,15 @@
+"""
+Catalog Matcher Service.
+
+The core service for matching source products against target competitor products.
+Handles query parsing, source selection, and product matching.
+"""
+
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import urllib.error
@@ -12,7 +20,9 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from matching_utils import (
+from backend.app.core.config import get_settings
+from backend.app.services.matching import (
+    ProductSignals,
     canonical_listing_key,
     canonical_url,
     extract_product_signals,
@@ -20,137 +30,50 @@ from matching_utils import (
     score_product_match,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "data"
-OUTPUT_DIR = ROOT / "output"
+logger = logging.getLogger(__name__)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Query Parsing Constants
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 SOURCE_REF_PATTERN = re.compile(r"\bP_[A-Z0-9]{8}\b", re.IGNORECASE)
 
 QUERY_STOPWORDS = {
-    "a",
-    "about",
-    "all",
-    "and",
-    "any",
-    "bitte",
-    "can",
-    "compare",
-    "der",
-    "die",
-    "ein",
-    "eine",
-    "find",
-    "for",
-    "from",
-    "fur",
-    "für",
-    "get",
-    "gib",
-    "give",
-    "ich",
-    "in",
-    "is",
-    "kannst",
-    "me",
-    "match",
-    "matching",
-    "mir",
-    "mit",
-    "of",
-    "on",
-    "please",
-    "show",
-    "to",
-    "und",
-    "what",
-    "with",
+    "a", "about", "all", "and", "any", "bitte", "can", "compare", "der", "die",
+    "ein", "eine", "find", "for", "from", "fur", "für", "get", "gib", "give",
+    "ich", "in", "is", "kannst", "me", "match", "matching", "mir", "mit", "of",
+    "on", "please", "show", "to", "und", "what", "with",
 }
 
 FOLLOW_UP_FILTER_TOKENS = {
     *QUERY_STOPWORDS,
-    "all",
-    "alles",
-    "allesamt",
-    "below",
-    "between",
-    "billig",
-    "cheapest",
-    "competitor",
-    "competitors",
-    "filter",
-    "from",
-    "hidden",
-    "higher",
-    "less",
-    "lower",
-    "max",
-    "maximum",
-    "min",
-    "minimum",
-    "more",
-    "most",
-    "only",
-    "over",
-    "price",
-    "retailer",
-    "show",
-    "than",
-    "under",
-    "visible",
-    "amazon",
-    "cyberport",
-    "electronic",
-    "electronic4you",
-    "etec",
-    "expert",
-    "e tec",
-    "mediamarkt",
-    "media",
-    "markt",
+    "all", "alles", "allesamt", "below", "between", "billig", "cheapest",
+    "competitor", "competitors", "filter", "from", "hidden", "higher", "less",
+    "lower", "max", "maximum", "min", "minimum", "more", "most", "only", "over",
+    "price", "retailer", "show", "than", "under", "visible",
+    "amazon", "cyberport", "electronic", "electronic4you", "etec", "expert",
+    "e tec", "mediamarkt", "media", "markt",
 }
 
 RETAILER_KEYWORDS = {
-    "expert at": "Expert AT",
-    "expert": "Expert AT",
+    "expert at": "Expert AT", "expert": "Expert AT",
     "cyberport": "Cyberport AT",
-    "electronic4you": "electronic4you.at",
-    "electronic 4 you": "electronic4you.at",
-    "e-tec": "E-Tec",
-    "etec": "E-Tec",
+    "electronic4you": "electronic4you.at", "electronic 4 you": "electronic4you.at",
+    "e-tec": "E-Tec", "etec": "E-Tec",
     "amazon": "Amazon AT",
-    "mediamarkt": "MediaMarkt AT",
-    "media markt": "MediaMarkt AT",
+    "mediamarkt": "MediaMarkt AT", "media markt": "MediaMarkt AT",
 }
 
 CATEGORY_KEYWORDS = {
     "TV & Audio": {"tv", "audio", "fernseher", "qled", "oled", "soundbar", "headphone", "kopfh", "lautsprecher"},
     "Small Appliances": {
-        "small",
-        "appliance",
-        "airfryer",
-        "heissluft",
-        "toaster",
-        "coffee",
-        "espresso",
-        "kettle",
-        "haargl",
-        "mixer",
-        "vacuum",
-        "staubsauger",
+        "small", "appliance", "airfryer", "heissluft", "toaster", "coffee",
+        "espresso", "kettle", "haargl", "mixer", "vacuum", "staubsauger",
     },
     "Large Appliances": {
-        "large",
-        "washing",
-        "washer",
-        "dishwasher",
-        "geschirr",
-        "kuehlschrank",
-        "kühlschrank",
-        "kuhlschrank",
-        "gefrier",
-        "dryer",
-        "toplader",
-        "frontlader",
+        "large", "washing", "washer", "dishwasher", "geschirr", "kuehlschrank",
+        "kühlschrank", "kuhlschrank", "gefrier", "dryer", "toplader", "frontlader",
     },
 }
 
@@ -174,79 +97,57 @@ KIND_QUERY_KEYWORDS = {
 }
 
 NON_ANCHOR_QUERY_TOKENS = {
-    "again",
-    "are",
-    "bad",
-    "better",
-    "different",
-    "any",
-    "detail",
-    "details",
-    "dont",
-    "else",
-    "for",
-    "from",
-    "good",
-    "have",
-    "has",
-    "item",
-    "items",
-    "list",
-    "like",
-    "me",
-    "more",
-    "next",
-    "no",
-    "not",
-    "only",
-    "ones",
-    "other",
-    "others",
-    "product",
-    "products",
-    "regarding",
-    "related",
-    "result",
-    "results",
-    "search",
-    "show",
-    "similar",
-    "that",
-    "there",
-    "the",
-    "these",
-    "those",
-    "which",
-    "with",
+    "again", "are", "bad", "better", "different", "any", "detail", "details",
+    "dont", "else", "for", "from", "good", "have", "has", "item", "items",
+    "list", "like", "me", "more", "next", "no", "not", "only", "ones", "other",
+    "others", "product", "products", "regarding", "related", "result", "results",
+    "search", "show", "similar", "that", "there", "the", "these", "those",
+    "which", "with",
 }
 
 FOLLOW_UP_EXPAND_PATTERNS = (
-    "any more",
-    "anything else",
-    "different ones",
-    "dont like",
-    "don't like",
-    "else",
-    "more results",
-    "next ones",
-    "no more",
-    "other ones",
-    "others",
+    "any more", "anything else", "different ones", "dont like", "don't like",
+    "else", "more results", "next ones", "no more", "other ones", "others",
 )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Data Classes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 @dataclass(frozen=True)
 class TargetRecord:
+    """A target product with precomputed signals for efficient matching."""
     product: dict[str, Any]
-    signals: Any
+    signals: ProductSignals
     visible: bool
     category_norm: str
     canonical_url: str | None
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Catalog Matcher Service
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
 class CatalogMatcher:
-    def __init__(self, root: Path):
-        self.root = root
+    """
+    Main service for matching source products against competitor catalogs.
+
+    Features:
+    - Natural language query parsing
+    - Multi-signal product matching (EAN, model, brand, name)
+    - Dynamic data refresh on each query
+    - Follow-up query context handling
+    - Web search fallback when local data unavailable
+    """
+
+    def __init__(self, data_dir: Path | None = None, output_dir: Path | None = None):
+        """Initialize the catalog matcher."""
+        settings = get_settings()
+        self.data_dir = data_dir or settings.data_dir
+        self.output_dir = output_dir or settings.output_dir
         self.default_sources = self._load_default_sources()
         self.target_files: list[tuple[Path, bool]] = []
         self.targets: list[TargetRecord] = []
@@ -254,17 +155,23 @@ class CatalogMatcher:
         self._refresh_targets()
 
     def _load_json_rows(self, path: Path) -> list[dict[str, Any]]:
+        """Load JSON array from file."""
         if not path.exists():
             return []
-        with open(path, encoding="utf-8") as f:
-            rows = json.load(f)
-        return rows if isinstance(rows, list) else []
+        try:
+            with open(path, encoding="utf-8") as f:
+                rows = json.load(f)
+            return rows if isinstance(rows, list) else []
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Failed to load {path}: {e}")
+            return []
 
     def _load_default_sources(self) -> list[dict[str, Any]]:
+        """Load default source products from data directory."""
         rows: list[dict[str, Any]] = []
         seen: set[str] = set()
 
-        for path in sorted(DATA_DIR.glob("source_products_*.json")):
+        for path in sorted(self.data_dir.glob("source_products_*.json")):
             category = path.stem.replace("source_products_", "").replace("_", " ").strip()
             category = category.replace("tv ", "TV ").replace("audio", "Audio")
             for row in self._load_json_rows(path):
@@ -276,19 +183,20 @@ class CatalogMatcher:
                 source.setdefault("category", category)
                 rows.append(source)
 
+        logger.info(f"Loaded {len(rows)} default source products")
         return rows
 
     def _target_files(self) -> list[tuple[Path, bool]]:
+        """Get list of target files (visible and hidden)."""
         files: list[tuple[Path, bool]] = []
 
-        # Visible pools are always sourced from `data/`.
-        for path in sorted(DATA_DIR.glob("target_pool_*.json")):
+        # Visible pools from data/
+        for path in sorted(self.data_dir.glob("target_pool_*.json")):
             files.append((path, True))
 
-        # Hidden pools: include every matched_*.json available.
-        # Prefer `output/` over `data/` when both exist for the same file name.
+        # Hidden pools: prefer output/ over data/
         hidden_by_name: dict[str, Path] = {}
-        for base in (OUTPUT_DIR, DATA_DIR):
+        for base in (self.output_dir, self.data_dir):
             for path in sorted(base.glob("matched_*.json")):
                 if path.name == "matched_ui_output.json":
                     continue
@@ -300,6 +208,7 @@ class CatalogMatcher:
         return files
 
     def _target_signature(self, files: list[tuple[Path, bool]]) -> tuple[tuple[str, bool, int, int], ...]:
+        """Generate signature for target files to detect changes."""
         signature: list[tuple[str, bool, int, int]] = []
         for path, visible in files:
             try:
@@ -311,6 +220,7 @@ class CatalogMatcher:
         return tuple(signature)
 
     def _refresh_targets(self) -> None:
+        """Refresh targets if files have changed."""
         files = self._target_files()
         signature = self._target_signature(files)
         if signature == self._targets_signature:
@@ -318,11 +228,12 @@ class CatalogMatcher:
         self.target_files = files
         self.targets = self._load_targets(files)
         self._targets_signature = signature
+        logger.info(f"Refreshed {len(self.targets)} target products from {len(files)} files")
 
     def _is_product_row(self, row: Any) -> bool:
+        """Check if row is a valid product record."""
         if not isinstance(row, dict):
             return False
-        # Guard against submission-shaped rows: {"source_reference": ..., "competitors": [...]}
         if "source_reference" in row and "competitors" in row and "name" not in row:
             return False
         if not row.get("reference"):
@@ -332,6 +243,7 @@ class CatalogMatcher:
         return True
 
     def _load_targets(self, files: list[tuple[Path, bool]]) -> list[TargetRecord]:
+        """Load all target products from files."""
         targets: list[TargetRecord] = []
 
         for path, visible in files:
@@ -365,11 +277,15 @@ class CatalogMatcher:
 
         return targets
 
+    # ── Query Parsing ─────────────────────────────────────────────────────────
+
     def _query_tokens(self, query: str) -> set[str]:
+        """Extract meaningful tokens from query."""
         tokens = set(normalize_text(query).split())
         return {t for t in tokens if len(t) > 1 and t not in QUERY_STOPWORDS}
 
     def _extract_source_refs(self, query: str) -> list[str]:
+        """Extract product references from query."""
         refs = []
         for match in SOURCE_REF_PATTERN.findall(query or ""):
             ref = match.upper()
@@ -378,6 +294,7 @@ class CatalogMatcher:
         return refs
 
     def _extract_retailer_filter(self, query: str) -> set[str]:
+        """Extract retailer filter from query."""
         q = normalize_text(query)
         allowed = set()
         for key, retailer in RETAILER_KEYWORDS.items():
@@ -386,6 +303,7 @@ class CatalogMatcher:
         return allowed
 
     def _extract_price_bounds(self, query: str) -> tuple[float | None, float | None]:
+        """Extract price bounds from query."""
         q = normalize_text(query)
         min_price = None
         max_price = None
@@ -408,6 +326,7 @@ class CatalogMatcher:
         return min_price, max_price
 
     def _extract_category_filter(self, query: str) -> set[str]:
+        """Extract category filter from query."""
         tokens = self._query_tokens(query)
         categories: set[str] = set()
         for category, keywords in CATEGORY_KEYWORDS.items():
@@ -416,6 +335,7 @@ class CatalogMatcher:
         return categories
 
     def _extract_kind_filter(self, query: str) -> set[str]:
+        """Extract product kind filter from query."""
         q = normalize_text(query)
         tokens = set(q.split())
         kinds: set[str] = set()
@@ -434,23 +354,19 @@ class CatalogMatcher:
         return kinds
 
     def _query_anchor_tokens(self, query: str, allowed_kinds: set[str]) -> set[str]:
+        """Extract anchor tokens (significant search terms) from query."""
         tokens = self._query_tokens(query)
         retailer_tokens = {
-            part
-            for key in RETAILER_KEYWORDS
-            for part in normalize_text(key).split()
-            if part
+            part for key in RETAILER_KEYWORDS
+            for part in normalize_text(key).split() if part
         }
         kind_tokens = {
-            part
-            for kind in allowed_kinds
+            part for kind in allowed_kinds
             for keyword in KIND_QUERY_KEYWORDS.get(kind, set())
-            for part in normalize_text(keyword).split()
-            if part
+            for part in normalize_text(keyword).split() if part
         }
         anchors = {
-            token
-            for token in tokens
+            token for token in tokens
             if len(token) >= 3
             and token not in NON_ANCHOR_QUERY_TOKENS
             and token not in retailer_tokens
@@ -460,6 +376,7 @@ class CatalogMatcher:
         return anchors
 
     def _matches_anchor_tokens(self, text: str, anchors: set[str]) -> bool:
+        """Check if text matches any anchor tokens."""
         if not anchors:
             return True
         text_norm = normalize_text(text)
@@ -469,6 +386,7 @@ class CatalogMatcher:
         return any(anchor in tokens or anchor in text_norm for anchor in anchors)
 
     def _source_matches_query_anchor(self, source: dict[str, Any], anchors: set[str]) -> bool:
+        """Check if source product matches anchor tokens."""
         if not anchors:
             return True
         fields = [
@@ -484,6 +402,7 @@ class CatalogMatcher:
         query: str,
         allowed_kinds: set[str] | None = None,
     ) -> dict[str, Any]:
+        """Extract structured signals from query."""
         kinds = allowed_kinds if allowed_kinds is not None else self._extract_kind_filter(query)
         categories = self._extract_category_filter(query)
         refs = self._extract_source_refs(query)
@@ -500,6 +419,7 @@ class CatalogMatcher:
         }
 
     def _looks_like_expand_follow_up(self, query: str) -> bool:
+        """Check if query is a follow-up for more results."""
         q = normalize_text(query)
         if not q:
             return False
@@ -509,6 +429,7 @@ class CatalogMatcher:
         return bool(tokens & {"again", "another", "different", "else", "extra", "more", "next", "remaining"})
 
     def _last_anchor_query(self, history: list[str] | None) -> str | None:
+        """Find the last query with meaningful anchors in history."""
         if not history:
             return None
         for previous in reversed(history):
@@ -519,12 +440,8 @@ class CatalogMatcher:
                 continue
             signals = self._structured_query_signal(previous)
             if (
-                signals["refs"]
-                or signals["categories"]
-                or signals["kinds"]
-                or signals["retailers"]
-                or signals["has_price_filter"]
-                or signals["anchors"]
+                signals["refs"] or signals["categories"] or signals["kinds"]
+                or signals["retailers"] or signals["has_price_filter"] or signals["anchors"]
             ):
                 return previous
         return None
@@ -533,6 +450,7 @@ class CatalogMatcher:
         self,
         previous_submission: list[dict[str, Any]] | None,
     ) -> dict[str, set[str]]:
+        """Build map of previously shown results for deduplication."""
         shown: dict[str, set[str]] = {}
         if not previous_submission:
             return shown
@@ -560,6 +478,7 @@ class CatalogMatcher:
         return shown
 
     def _target_result_key(self, target: TargetRecord) -> str:
+        """Generate key for deduplicating target results."""
         reference = str(target.product.get("reference") or "").strip()
         if target.visible and reference:
             return f"ref:{reference}"
@@ -571,6 +490,7 @@ class CatalogMatcher:
         return f"anon:{id(target)}"
 
     def _query_has_anchor(self, query: str) -> bool:
+        """Check if query has meaningful anchor content."""
         if not query.strip():
             return False
         if self._extract_source_refs(query):
@@ -582,14 +502,14 @@ class CatalogMatcher:
 
         tokens = self._query_tokens(query)
         anchor_tokens = {
-            t
-            for t in tokens
+            t for t in tokens
             if t not in FOLLOW_UP_FILTER_TOKENS
             and not re.fullmatch(r"[0-9]+(?:[.,][0-9]+)?", t)
         }
         return bool(anchor_tokens)
 
     def _effective_query(self, query: str, history: list[str] | None) -> str:
+        """Compute effective query, potentially combining with history."""
         current = (query or "").strip()
         if not current:
             return current
@@ -616,6 +536,7 @@ class CatalogMatcher:
         return current
 
     def _source_score(self, source: dict[str, Any], query_norm: str, query_tokens: set[str]) -> float:
+        """Score a source product against query."""
         if not query_norm:
             return 0.0
 
@@ -634,6 +555,8 @@ class CatalogMatcher:
             score += 0.8
         return score
 
+    # ── Source Selection ──────────────────────────────────────────────────────
+
     def _select_sources(
         self,
         query: str,
@@ -642,6 +565,7 @@ class CatalogMatcher:
         allowed_kinds: set[str],
         anchor_tokens: set[str],
     ) -> list[dict[str, Any]]:
+        """Select source products matching the query."""
         sources = provided or self.default_sources
         if not sources:
             return []
@@ -659,8 +583,7 @@ class CatalogMatcher:
         categories = self._extract_category_filter(query)
         if categories:
             filtered = [
-                s
-                for s in sources
+                s for s in sources
                 if str(s.get("category") or "") in categories
                 or normalize_text(str(s.get("category") or "")) in {normalize_text(c) for c in categories}
             ]
@@ -678,8 +601,6 @@ class CatalogMatcher:
             filtered = [s for s in sources if self._source_matches_query_anchor(s, anchor_tokens)]
             if filtered:
                 sources = filtered
-            # If anchors don't match anything, fall through to scoring so generic/
-            # conversational queries still surface products from the loaded data files.
 
         query_norm = normalize_text(query)
         if any(word in query_norm for word in {"all", "every", "gesamte", "alle", "catalog", "katalog"}):
@@ -698,6 +619,8 @@ class CatalogMatcher:
 
         return [source for _, source in scored[:max_sources]]
 
+    # ── Target Matching ───────────────────────────────────────────────────────
+
     def _match_one_source(
         self,
         source: dict[str, Any],
@@ -707,6 +630,7 @@ class CatalogMatcher:
         min_price: float | None,
         max_price: float | None,
     ) -> list[tuple[float, str, TargetRecord]]:
+        """Find matching targets for a single source product."""
         source_signals = extract_product_signals(source)
         source_ref = str(source.get("reference") or "")
         source_category_norm = normalize_text(source.get("category"))
@@ -721,6 +645,7 @@ class CatalogMatcher:
             if allowed_retailers and retailer not in allowed_retailers:
                 continue
 
+            # Kind filtering
             if allowed_kinds:
                 target_kind = target.signals.kind
                 if target_kind not in allowed_kinds:
@@ -737,9 +662,12 @@ class CatalogMatcher:
                     if not kind_name_hit:
                         continue
 
-            if target.visible and source_category_norm and target.category_norm and source_category_norm != target.category_norm:
-                continue
+            # Category filtering for visible targets
+            if target.visible and source_category_norm and target.category_norm:
+                if source_category_norm != target.category_norm:
+                    continue
 
+            # Price filtering
             price = target.product.get("price_eur")
             if isinstance(price, (int, float)):
                 if min_price is not None and price < min_price:
@@ -747,13 +675,13 @@ class CatalogMatcher:
                 if max_price is not None and price > max_price:
                     continue
 
+            # Direct reference match
             target_ref = str(target.product.get("reference") or "")
             if source_ref and source_ref == target_ref:
                 scored.append((1.0, "direct_ref", target))
                 continue
 
-            # If query asks for specific kinds but source name clearly doesn't mention it,
-            # keep precision high by avoiding cross-kind semantic matches.
+            # Kind validation for cross-kind matches
             if allowed_kinds and source_signals.kind is None:
                 source_kind_hit = False
                 for kind in allowed_kinds:
@@ -767,6 +695,7 @@ class CatalogMatcher:
                 if not source_kind_hit:
                     continue
 
+            # Score the match
             result = score_product_match(
                 source,
                 target.product,
@@ -779,6 +708,7 @@ class CatalogMatcher:
 
         scored.sort(key=lambda item: item[0], reverse=True)
 
+        # Deduplicate by listing key
         best_by_key: dict[str, tuple[float, str, TargetRecord]] = {}
         for score, method, target in scored:
             if target.visible:
@@ -794,8 +724,12 @@ class CatalogMatcher:
         deduped = sorted(best_by_key.values(), key=lambda item: item[0], reverse=True)
         return deduped[:max_competitors]
 
+    # ── Web Search Fallback ───────────────────────────────────────────────────
+
     def _search_brave(self, query: str, max_results: int) -> list[dict[str, Any]]:
-        api_key = (os.getenv("BRAVE_SEARCH_API_KEY") or os.getenv("BRAVE_API_KEY") or "").strip()
+        """Search using Brave API as fallback."""
+        settings = get_settings()
+        api_key = settings.brave_api_key or os.getenv("BRAVE_SEARCH_API_KEY", "")
         if not api_key:
             return []
 
@@ -813,7 +747,8 @@ class CatalogMatcher:
         try:
             with urllib.request.urlopen(req, timeout=15) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, ValueError):
+        except (urllib.error.URLError, TimeoutError, ValueError) as e:
+            logger.warning(f"Brave search failed: {e}")
             return []
 
         results = payload.get("web", {}).get("results", [])
@@ -833,23 +768,17 @@ class CatalogMatcher:
 
             host = urllib.parse.urlparse(link).netloc.lower().removeprefix("www.")
             ref = "P_WS_" + hashlib.md5(link.encode("utf-8")).hexdigest()[:8].upper()
-            competitors.append(
-                {
-                    "reference": ref,
-                    "competitor_retailer": host or "Web Search",
-                    "competitor_product_name": title.strip(),
-                    "competitor_url": link,
-                    "competitor_price": None,
-                }
-            )
+            competitors.append({
+                "reference": ref,
+                "competitor_retailer": host or "Web Search",
+                "competitor_product_name": title.strip(),
+                "competitor_url": link,
+                "competitor_price": None,
+            })
 
         return competitors
 
-    def _fallback_web_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
-        q = query.strip()
-        if not q:
-            return []
-        return self._search_brave(q, max_results=max_results)
+    # ── Main Query Method ─────────────────────────────────────────────────────
 
     def query(
         self,
@@ -861,46 +790,53 @@ class CatalogMatcher:
         previous_submission: list[dict[str, Any]] | None = None,
         persist_output: bool = False,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        """
+        Execute a query and return matches.
+
+        Returns:
+            (submission, cards, stats) tuple
+        """
         self._refresh_targets()
+
+        # Parse query signals
         current_signals = self._structured_query_signal(query)
-        has_structured_current_query = bool(
-            current_signals["refs"]
-            or current_signals["categories"]
-            or current_signals["kinds"]
-            or current_signals["retailers"]
-            or current_signals["has_price_filter"]
-            or current_signals["anchors"]
-        )
-        # For follow-up detection, only hard product filters block expand mode.
-        # Generic anchor tokens (e.g. "happy", "share") from conversational phrases
-        # must not suppress it — they carry no product-specific intent.
         has_hard_product_filter = bool(
-            current_signals["refs"]
-            or current_signals["categories"]
-            or current_signals["kinds"]
-            or current_signals["retailers"]
+            current_signals["refs"] or current_signals["categories"]
+            or current_signals["kinds"] or current_signals["retailers"]
             or current_signals["has_price_filter"]
         )
+
+        # Check for follow-up expansion
         previous_source_refs = [
             str(entry.get("source_reference") or "").strip()
             for entry in (previous_submission or [])
             if isinstance(entry, dict) and str(entry.get("source_reference") or "").strip()
         ]
-        follow_up_expand = bool(previous_source_refs) and not has_hard_product_filter and self._looks_like_expand_follow_up(query)
+        follow_up_expand = (
+            bool(previous_source_refs)
+            and not has_hard_product_filter
+            and self._looks_like_expand_follow_up(query)
+        )
+
         if follow_up_expand:
             effective_query = self._last_anchor_query(history) or query
         else:
             effective_query = self._effective_query(query, history)
 
+        # Extract filters
         allowed_kinds = self._extract_kind_filter(effective_query)
         anchor_tokens = self._query_anchor_tokens(effective_query, allowed_kinds)
+        allowed_retailers = self._extract_retailer_filter(effective_query)
+        min_price, max_price = self._extract_price_bounds(effective_query)
+        previous_shown_keys = self._previous_submission_map(previous_submission)
+
+        # Select sources
         selected_sources = self._select_sources(
-            effective_query,
-            source_products,
-            max_sources,
-            allowed_kinds=allowed_kinds,
-            anchor_tokens=anchor_tokens,
+            effective_query, source_products, max_sources,
+            allowed_kinds=allowed_kinds, anchor_tokens=anchor_tokens,
         )
+
+        # For follow-up, use previous source refs
         if follow_up_expand and previous_source_refs:
             source_map = {
                 str(source.get("reference") or "").strip(): source
@@ -908,17 +844,12 @@ class CatalogMatcher:
                 if str(source.get("reference") or "").strip()
             }
             selected_sources = [
-                source_map[ref]
-                for ref in previous_source_refs
-                if ref in source_map
+                source_map[ref] for ref in previous_source_refs if ref in source_map
             ]
-        allowed_retailers = self._extract_retailer_filter(effective_query)
-        min_price, max_price = self._extract_price_bounds(effective_query)
-        previous_shown_keys = self._previous_submission_map(previous_submission)
 
+        # Execute matching
         submission: list[dict[str, Any]] = []
         cards: list[dict[str, Any]] = []
-
         matched_sources = 0
         visible_links = 0
         hidden_links = 0
@@ -927,14 +858,13 @@ class CatalogMatcher:
         additional_only = follow_up_expand
         excluded_previous_links = 0
 
+        # Fallback if no targets
         if not self.targets:
             fallback_reason = "no_local_target_files"
-            fallback_competitors = self._fallback_web_search(effective_query, max_competitors_per_source)
+            fallback_competitors = self._search_brave(effective_query, max_competitors_per_source)
             if fallback_competitors:
                 fallback_used = True
-                source_ref = str(selected_sources[0].get("reference") or "") if selected_sources else ""
-                if not source_ref:
-                    source_ref = "WEB_QUERY"
+                source_ref = str(selected_sources[0].get("reference") or "") if selected_sources else "WEB_QUERY"
                 submission = [{"source_reference": source_ref, "competitors": fallback_competitors}]
                 cards = [
                     {
@@ -951,6 +881,7 @@ class CatalogMatcher:
                 matched_sources = 1
                 hidden_links = len(fallback_competitors)
 
+        # Normal matching
         if not fallback_used:
             for source in selected_sources:
                 source_ref = str(source.get("reference") or "")
@@ -972,6 +903,7 @@ class CatalogMatcher:
                     if target_key in previous_shown_keys.get(source_ref, set()):
                         excluded_previous_links += 1
                         continue
+
                     product = target.product
                     competitor = {
                         "reference": str(product.get("reference") or ""),
@@ -982,17 +914,15 @@ class CatalogMatcher:
                     }
                     competitors.append(competitor)
 
-                    cards.append(
-                        {
-                            "reference": competitor["reference"],
-                            "source_reference": source_ref,
-                            "name": competitor["competitor_product_name"],
-                            "retailer": competitor["competitor_retailer"],
-                            "price_eur": competitor["competitor_price"],
-                            "image_url": product.get("image_url"),
-                            "url": competitor["competitor_url"],
-                        }
-                    )
+                    cards.append({
+                        "reference": competitor["reference"],
+                        "source_reference": source_ref,
+                        "name": competitor["competitor_product_name"],
+                        "retailer": competitor["competitor_retailer"],
+                        "price_eur": competitor["competitor_price"],
+                        "image_url": product.get("image_url"),
+                        "url": competitor["competitor_url"],
+                    })
 
                     if target.visible:
                         visible_links += 1
@@ -1002,21 +932,23 @@ class CatalogMatcher:
                 if competitors:
                     matched_sources += 1
 
-                submission.append(
-                    {
-                        "source_reference": source_ref,
-                        "competitors": competitors,
-                    }
-                )
+                submission.append({
+                    "source_reference": source_ref,
+                    "competitors": competitors,
+                })
 
+        # Persist output
         output_path: str | None = None
         if persist_output:
-            output_file = DATA_DIR / "matched_ui_output.json"
+            output_file = self.data_dir / "matched_ui_output.json"
             tmp_file = output_file.with_suffix(".tmp")
             with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(submission, f, ensure_ascii=False, indent=2)
             tmp_file.replace(output_file)
-            output_path = str(output_file.relative_to(self.root))
+            try:
+                output_path = str(output_file.relative_to(get_settings().data_dir.parent))
+            except ValueError:
+                output_path = str(output_file)
 
         stats = {
             "query": query,
@@ -1030,7 +962,7 @@ class CatalogMatcher:
             "kind_filter": sorted(allowed_kinds),
             "anchor_tokens": sorted(anchor_tokens),
             "price_filter": {"min": min_price, "max": max_price},
-            "target_files_loaded": [str(path.relative_to(self.root)) for path, _ in self.target_files],
+            "target_files_loaded": [str(path.name) for path, _ in self.target_files],
             "follow_up_expand": follow_up_expand,
             "additional_only": additional_only,
             "previous_source_refs": previous_source_refs,
@@ -1039,7 +971,17 @@ class CatalogMatcher:
             "fallback_reason": fallback_reason,
             "output_file": output_path,
         }
+
         return submission, cards, stats
 
 
-matcher = CatalogMatcher(ROOT)
+# Global instance
+_matcher: CatalogMatcher | None = None
+
+
+def get_matcher() -> CatalogMatcher:
+    """Get or create the global matcher instance."""
+    global _matcher
+    if _matcher is None:
+        _matcher = CatalogMatcher()
+    return _matcher

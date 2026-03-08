@@ -1,29 +1,21 @@
+/**
+ * IndexedDB persistence layer for session management.
+ * Stores chat sessions with messages, uploaded catalogs, and submission history.
+ */
+
+import type { MatchCard, SourceSubmission } from "./api";
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Configuration
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 const DB_NAME = "competitor-matcher";
 const DB_VERSION = 2;
 const STORE_NAME = "sessions";
 
-export interface MatchCard {
-  reference: string;
-  source_reference: string;
-  name: string;
-  retailer: string;
-  price_eur: number | null;
-  image_url: string | null;
-  url: string | null;
-}
-
-export interface SubmissionCompetitor {
-  reference: string;
-  competitor_retailer: string;
-  competitor_product_name: string;
-  competitor_url: string | null;
-  competitor_price: number | null;
-}
-
-export interface SourceSubmission {
-  source_reference: string;
-  competitors: SubmissionCompetitor[];
-}
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Types
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export interface ChatMessage {
   role: "user" | "ai";
@@ -41,84 +33,157 @@ export interface Session {
   messages: ChatMessage[];
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Database Connection
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+let dbInstance: IDBDatabase | null = null;
+
 function openDB(): Promise<IDBDatabase> {
+  // Return cached connection if available
+  if (dbInstance) {
+    return Promise.resolve(dbInstance);
+  }
+
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+
+    request.onsuccess = () => {
+      dbInstance = request.result;
+
+      // Handle connection close
+      dbInstance.onclose = () => {
+        dbInstance = null;
+      };
+
+      resolve(dbInstance);
+    };
+
+    request.onerror = () => {
+      reject(new Error(`Failed to open IndexedDB: ${request.error?.message}`));
+    };
   });
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Helper Functions
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function normalizeSession(session: Session): Session {
+  return {
+    ...session,
+    uploaded_source_products: session.uploaded_source_products ?? null,
+    messages: (session.messages || []).map((m) => ({
+      ...m,
+      cards: m.cards ?? null,
+      submission: m.submission ?? null,
+    })),
+  };
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Public API
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Get all sessions, sorted by timestamp (newest first).
+ */
 export async function getAllSessions(): Promise<Session[]> {
   const db = await openDB();
+
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.getAll();
-    req.onsuccess = () => {
-      const sessions = (req.result as Session[]).map((s) => ({
-        ...s,
-        uploaded_source_products: s.uploaded_source_products ?? null,
-        messages: (s.messages || []).map((m) => ({
-          ...m,
-          cards: m.cards ?? null,
-          submission: m.submission ?? null,
-        })),
-      }));
-      sessions.sort((a, b) => b.timestamp - a.timestamp);
+    const transaction = db.transaction(STORE_NAME, "readonly");
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const sessions = (request.result as Session[])
+        .map(normalizeSession)
+        .sort((a, b) => b.timestamp - a.timestamp);
       resolve(sessions);
     };
-    req.onerror = () => reject(req.error);
+
+    request.onerror = () => {
+      reject(new Error(`Failed to get sessions: ${request.error?.message}`));
+    };
   });
 }
 
+/**
+ * Get a single session by ID.
+ */
 export async function getSession(id: string): Promise<Session | undefined> {
   const db = await openDB();
+
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).get(id);
-    req.onsuccess = () => {
-      const session = req.result as Session | undefined;
-      if (!session) {
-        resolve(undefined);
-        return;
-      }
-      resolve({
-        ...session,
-        uploaded_source_products: session.uploaded_source_products ?? null,
-        messages: (session.messages || []).map((m) => ({
-          ...m,
-          cards: m.cards ?? null,
-          submission: m.submission ?? null,
-        })),
-      });
+    const transaction = db.transaction(STORE_NAME, "readonly");
+    const request = transaction.objectStore(STORE_NAME).get(id);
+
+    request.onsuccess = () => {
+      const session = request.result as Session | undefined;
+      resolve(session ? normalizeSession(session) : undefined);
     };
-    req.onerror = () => reject(req.error);
+
+    request.onerror = () => {
+      reject(new Error(`Failed to get session: ${request.error?.message}`));
+    };
   });
 }
 
+/**
+ * Save or update a session.
+ */
 export async function saveSession(session: Session): Promise<void> {
   const db = await openDB();
+
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).put(session);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).put(session);
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => {
+      reject(new Error(`Failed to save session: ${transaction.error?.message}`));
+    };
   });
 }
 
+/**
+ * Delete a session by ID.
+ */
 export async function deleteSession(id: string): Promise<void> {
   const db = await openDB();
+
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).delete(id);
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => {
+      reject(new Error(`Failed to delete session: ${transaction.error?.message}`));
+    };
+  });
+}
+
+/**
+ * Clear all sessions (for debugging/reset).
+ */
+export async function clearAllSessions(): Promise<void> {
+  const db = await openDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).clear();
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => {
+      reject(new Error(`Failed to clear sessions: ${transaction.error?.message}`));
+    };
   });
 }
