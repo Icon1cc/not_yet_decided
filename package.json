@@ -1,0 +1,7 @@
+{
+  "name": "not-yet-decided",
+  "version": "1.0.0",
+  "scripts": {
+    "vercel-build": "cd frontend && npm install && npm run vercel-build"
+  }
+}
