@@ -2,21 +2,26 @@ from retrieval.indexing import product_to_chunk
 
 # ── Match / No-Match ──────────────────────────────────────────────────────────
 
-MATCH_SYSTEM = """You are a product matching expert for an Austrian retailer.
+MATCH_SYSTEM = """You are a product matching expert for an Austrian retailer. Your job is to find competitor listings for the same product — err on the side of MATCH when in doubt.
 
 You receive a SOURCE product and a list of CANDIDATE products from competitor retailers.
 For each candidate decide if it is the SAME or EQUIVALENT product as the source, sold by a different retailer.
 
-Rules for MATCH:
-- Same brand AND same core model number/identifier (e.g. "32LQ63806LC" must match "32LQ63806LC")
+Rules for MATCH (be generous):
+- Same brand + same screen/product size + same model series = MATCH, even if one uses a full regional code and the other a short series name
+  * "QE55Q7FAAUXXN" vs "Q7F 55 Zoll" = MATCH (Q7F series, same 55" size)
+  * "UE32F6000FUXXN" vs "F6000 32 Zoll" = MATCH
+  * "32LQ63806LC" vs "32LQ63806LC" = MATCH
+- Color, finish, regional, or year suffix variants = MATCH
+  * "PTV 32GF-5025C-B" vs "PTV 32GF-5025C" = MATCH (-B is color variant)
 - Minor listing differences OK: extra words, retailer suffix, translated descriptions
-- Color/finish suffix variants OK if core model matches
+- If EAN or GTIN matches = always MATCH
+- If unsure but brand + size + product type look right = lean toward MATCH
 
-Rules for NO_MATCH:
-- Different screen size (e.g. 32" vs 40") = NOT the same product
-- Different model number = NOT the same product
-- Same brand but different product line or specs = NOT the same product
-- Clearly different product type = NOT the same product
+Rules for NO_MATCH (only clear disqualifiers):
+- Definitively different screen size (e.g. 32" vs 40") AND different model = NO_MATCH
+- Clearly different model series with no overlap (e.g. Q7F vs Q8F, S5403 vs V5C) = NO_MATCH
+- Completely different product type (e.g. TV vs soundbar) = NO_MATCH
 
 Output exactly one line per candidate in this format:
 <reference>: MATCH
@@ -31,26 +36,30 @@ def build_match_prompt(source: dict, candidates: list[dict]) -> str:
     candidate_blocks = []
     for c in candidates:
         chunk = c.get("chunk_text") or product_to_chunk(c)
-        candidate_blocks.append(f"[{c['reference']}]\n{chunk}")
+        candidate_blocks.append(f"CANDIDATE {c['reference']}:\n{chunk}")
     candidates_text = "\n\n".join(candidate_blocks)
     return (
         f"SOURCE PRODUCT:\n{source_chunk}\n\n"
         f"CANDIDATES:\n{candidates_text}\n\n"
-        "Output one line per candidate: <reference>: MATCH or <reference>: NO_MATCH"
+        "Output one line per candidate: <reference>: MATCH or <reference>: NO_MATCH\nDo NOT wrap the reference in brackets."
     )
 
 
 # ── Query Expansion ───────────────────────────────────────────────────────────
 
-EXPANSION_SYSTEM = """You are a product search expert. Given a product, extract up to 6 search terms that uniquely identify it.
+EXPANSION_SYSTEM = """You are a product search expert. Given a product, extract up to 8 search terms that uniquely identify it.
 
 Rules:
 - Focus on WHAT THE PRODUCT IS, not what it is compatible with or what it includes in the box
-- Prioritize: model numbers, GTINs/EANs, brand+model+size, product type + key specs
-- CRITICAL: Ignore all text after "für", "kompatibel mit", "compatible with", "fits", "for use with" — these list devices the product works WITH, not what the product IS
-- For accessories (cables, headphones, covers): focus on the accessory itself; NEVER extract phone/TV/console model names from compatibility lists
-- Include synonyms for generic products (e.g. Mikrowellendeckel → also Mikrowellenhaube, Mikrowellenabdeckung)
-- Each term should be independently searchable (a phrase or keyword, not a full sentence)
+- CRITICAL: Ignore all text after "für", "kompatibel mit", "compatible with", "fits", "for use with"
+- For accessories (cables, headphones): focus on the accessory itself; NEVER extract phone/TV/console names from compatibility lists
+- For TVs: ALWAYS decompose full model codes into their short series name + size:
+  * "QE55Q7FAAUXXN" → also emit "Q7F" and "Samsung Q7F 55" (Q7F is the series embedded in the full code)
+  * "UE32F6000FUXXN" → also emit "F6000" and "Samsung F6000 32"
+  * "32LQ63806LC" → also emit "32LQ63806" and "LQ63806" (strip trailing regional suffix)
+  * "55HP6265E" → also emit "HP6265" and "Sharp HP6265 55"
+- Include synonyms for generic products (e.g. Mikrowellendeckel → also Mikrowellenhaube)
+- Each term must be independently searchable (short phrase or keyword, not a sentence)
 - Return one term per line, most discriminative first. No bullets, no numbering, no explanations.
 
 Examples:

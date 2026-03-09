@@ -1,200 +1,65 @@
 # Competitor Price Intelligence — Austrian Electronics Retail
 
-Automated pipeline for discovering competitor listings of electronics products across Austrian retail websites. Given a catalog of source products, the system finds the same products on competitor sites, extracts their prices, and surfaces them through a retrieval interface backed by Qdrant.
-
-The two main concerns are: **data collection** (scraping competitor product pages) and **retrieval** (matching source products to competitor listings with high precision).
+Automated pipeline for discovering and surfacing competitor listings of electronics products across Austrian retail websites. Given a catalog of source products, the system finds the same products on competitor sites, extracts their prices, and exposes them through a chat-based intelligence interface.
 
 ---
 
-## Interface
+## The Idea
 
-The front-end is a chat-style web application built with React, Vite, and Tailwind CSS. It is the primary entry point for querying the system.
+Austrian electronics retailers — Expert, Cyberport, electronic4you, E-Tec, Amazon AT, MediaMarkt AT — sell largely overlapping product catalogs. Tracking what a competitor charges for the exact same product, across hundreds of SKUs, is impractical to do manually.
 
-### Starting the frontend
+The system starts with a catalog of **source products** (your own listings, each with a name, brand, EAN, and specifications) and automatically:
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+1. Searches competitor sites for the same product using the Brave Search API
+2. Extracts structured data — name, price, EAN, image, specs — from competitor product pages
+3. Stores the results as structured competitor records, one file per retailer
+4. Exposes them through a chat interface where you can query by product name, brand, category, retailer, or price range
 
-The app runs at `http://localhost:5173` by default.
+The key distinction in data sources:
 
-### User flow
-
-**Home screen**
-
-![Home screen](docs/Home%20Page.png)
-
-When the app first loads, the user sees a landing screen with two interaction paths:
-
-1. **Upload a JSON catalog** — drag-and-drop or click the file zone to upload a `source_products_*.json` file. The file name is attached to a new session and acknowledged by the assistant.
-2. **Type a natural language query** — free-text input at the bottom, or click one of the four suggested prompts ("Find competitors for cleaning products", "Match kitchen appliances under €50", etc.) to start immediately without uploading.
-
-**Session model**
-
-Every interaction creates a named session stored in the browser (IndexedDB via `lib/db`). Previous sessions appear in the left sidebar and can be resumed or deleted. A session tracks the uploaded file name and the full message history.
-
-**Inside a session**
-
-Once a session is active, the layout switches to a chat feed:
-
-- User messages appear as right-aligned bubbles.
-- If no file has been uploaded yet, the drop zone is shown inline in the chat feed.
-- After sending a message, the assistant processes the query through the retrieval pipeline (exact match → Qdrant hybrid BM25+dense → LLM filtering) and responds.
-
-**Response rendering**
-
-The assistant response is inspected before rendering:
-
-- If the response body parses as a JSON array where each element has `image_url` and `url` fields, it is rendered as a **product card grid** — one card per competitor match, showing the product image, name, retailer label, price in EUR, and a "View Product" link to the original retailer page.
-- Otherwise the response is rendered as a plain text bubble.
-
-![Product page](docs/Product%20Page.png)
-
-Each product card shows:
-- Product image (square crop, object-fit contain)
-- Product name
-- Retailer name (e.g. `AMAZON AT`, `EXPERT AT`) in small caps
-- Price in EUR (`€9.88`)
-- A full-width "View Product" button that opens the competitor listing in a new tab
-
-The match count is shown above the card grid ("1 MATCH FOUND", "3 MATCHES FOUND") so the user immediately knows how many competitor listings were identified. Continuing to type in the input bar at the bottom allows follow-up queries within the same session.
-
-**End-to-end flow summary**
-
-```
-User uploads source_products.json  or  types a query
-        │
-        ▼
-Session created, query sent to backend
-        │
-        ▼
-Backend: Qdrant payload prefiltering + exact identifier match (EAN / GTIN / name, additional enrichment fields (product_type, size...))
-        │
-        ▼
-Backend: Qdrant BM25 sparse
-        ▼
-Backend: LLM match / no-match filter (Claude Sonnet, batched)
-        │
-        ▼
-Response: [{name, retailer, price_eur, image_url, url}, ...]
-        │
-        ▼
-Frontend renders product card grid with prices and direct links
-```
-
----
-
-## The Problem
-
-Austrian electronics retailers sell largely overlapping product catalogs, but tracking competitor pricing manually is impractical at scale. This system takes a list of source products — each with a name, brand, EAN, and specifications — and automatically:
-
-1. Locates the same product on up to six competitor sites
-2. Extracts structured data: name, price, EAN, brand, image, specifications
-3. Indexes everything into Qdrant for fast retrieval
-4. Runs a multi-stage matching pipeline to confirm which candidates are genuine matches
-
-**Retailers covered**
-
-| Retailer | Type | Discovery method |
+| Retailer | Type | Why |
 |---|---|---|
-| Expert AT | Hidden | Brave Search + Playwright |
-| Cyberport AT | Hidden | Brave Search + Playwright |
-| electronic4you.at | Hidden | Brave Search + Playwright |
-| E-Tec | Hidden | Brave Search + Playwright |
-| Amazon AT | Visible | Pre-supplied target pool JSON |
-| MediaMarkt AT | Visible | Pre-supplied target pool JSON |
+| Amazon AT | Visible | Pre-supplied structured target pool |
+| MediaMarkt AT | Visible | Pre-supplied structured target pool |
+| Expert AT | Hidden | No data feed — scraped via Brave Search + Playwright |
+| Cyberport AT | Hidden | No data feed — scraped via Brave Search + Playwright |
+| electronic4you.at | Hidden | No data feed — scraped via Brave Search + Playwright |
+| E-Tec | Hidden | No data feed — scraped via Brave Search + Playwright |
 
-"Hidden" retailers have no structured data feed, so their product pages are scraped. "Visible" retailers supply a target pool that can be matched directly.
-
----
-
-## Project Structure
-
-```
-frontend/
-  src/pages/Index.tsx           # Main chat + session UI
-  src/components/
-    DropZone.tsx                # JSON file upload zone
-    ChatMessage.tsx             # Message renderer (text bubble or product card grid)
-    ProductCard.tsx             # Single competitor match card
-    SessionSidebar.tsx          # Session list + navigation
-    ChatInput.tsx               # Text input bar
-  src/lib/db.ts                 # IndexedDB session persistence
-
-data/
-  source_products_*.json        # Source products to match (input)
-  target_pool_*.json            # Visible-retailer product pools (Amazon, MediaMarkt)
-
-scrape/
-  run_all_categories_brave.py   # Primary: auto-discover all source categories and scrape each
-  scraper_brave.py              # Phase 1a: Brave Search API → product URLs + snippets
-  merge_brave_to_matched.py     # Build matched_cyberport/electronic4you from Brave raw outputs
-  scraper_playwright.py         # Optional Phase 1b: Playwright → full page JSON extraction
-  parser_raw.py                 # Optional Phase 2: Raw page JSON → structured product records
-  match_targets.py              # Deterministic matching against visible-retailer pool
-  build_submission.py           # Format final output for submission
-
-output/
-  raw_brave_*.json              # Category-wise Brave discovery output (all hidden retailers)
-  raw_*.json                    # Optional raw Playwright page data (per retailer)
-  matched_*.json                # Final structured product records (per retailer)
-  scraped_*.json                # Legacy Brave-only outputs
-
-retrieval/
-  indexing.py                   # Qdrant collection setup + product upsert (dense + BM25)
-  qdrant_retrieval.py           # Hybrid retrieval: dense + BM25 with RRF fusion
-  exact_match.py                # Deterministic field-weight exact match
-  generation.py                 # LLM-based match / no-match filtering
-  embeddings.py                 # Embedding API calls (OpenRouter)
-
-initialize_db.py                # CLI: load JSON files and index into Qdrant
-constants.py                    # Paths, model names, Qdrant config
-```
+**Visible** retailers supply a structured product pool that can be matched directly. **Hidden** retailers have no data feed, so their product pages must be discovered and scraped.
 
 ---
 
-## Data Collection and Clearance
+## Data Collection
 
-We invested explicit engineering time in repeated scrape → audit → clean cycles, not one-pass scraping. In practice, we ran category-level collections, inspected false positives and blocked pages, tightened rules (URL validators, model blocklists, dedupe, field guards), and reran with resumable outputs until the matched files contained only usable records.
+All data collection lives in `scrape/`. The pipeline has two modes: a fast Brave-Search-only mode that works even when pages block scrapers, and an optional full-extraction mode using a headless browser.
 
-### Source data format
+### How scraping works — overview
 
-Each source product JSON has the following shape:
-
-```json
-{
-  "reference": "P_C2CA4D4D",
-  "name": "Samsung QE55Q7FAAUXXN QLED 4K TV",
-  "brand": "Samsung",
-  "ean": "8806097123057",
-  "price_eur": 799.00,
-  "specifications": {
-    "GTIN": "8806097123057",
-    "Hersteller Modellnummer": "QE55Q7FAAUXXN",
-    "Bildschirmdiagonale": "55 Zoll"
-  }
-}
 ```
-
-`source_products_*.json` files are auto-discovered by the pipeline. Multiple category files (`tv_&_audio`, `small_appliances`, `large_appliances`) are processed category-by-category and then merged at output stage.
-
-### Production pipeline (all categories)
-
-The default production flow is:
-
-1. `run_all_categories_brave.py` auto-discovers all `data/source_products_*.json` files.
-2. Each category is scraped to `output/raw_brave_<category>.json`.
-3. `merge_brave_to_matched.py` merges all raw category files into:
-   - `output/matched_cyberport.json`
-   - `output/matched_electronic4you.json`
-
-This path is used to increase coverage even when direct page extraction is partially blocked.
+source_products_*.json
+        │
+        ▼
+  For each source product × each hidden retailer:
+        │
+        ├─ Phase 1a: Brave Search API
+        │    Build site: queries (EAN / model number / brand+name)
+        │    → raw_brave_*.json  (URL + search snippet + price hint)
+        │
+        └─ Phase 1b (optional): Playwright
+             Visit each URL with headless Chromium
+             Extract ld+json, __NEXT_DATA__, hydration blobs
+             → raw_*.json  (full structured page data)
+                   │
+                   ▼
+             Phase 2: parser_raw.py
+             Name / price / EAN / brand / specs extraction
+             → matched_*.json
+```
 
 ### Phase 1a — Brave Search API (`scraper_brave.py`)
 
-For each source product × each hidden retailer, the scraper constructs targeted `site:` queries and calls the Brave Search API. Query construction follows a strict priority:
+For each source product and each hidden retailer, the scraper constructs `site:` queries and calls the Brave Search API. Query construction follows a strict priority:
 
 1. **EAN/GTIN** — globally unique, used verbatim: `site:expert.at 8806097123057`
 2. **Brand + model number** — extracted from spec fields or the product name: `site:cyberport.at Samsung QE55Q7FAAUXXN`
@@ -202,7 +67,7 @@ For each source product × each hidden retailer, the scraper constructs targeted
 
 Up to three query variants are tried per retailer per product, stopping once enough product URLs have been found. Results are deduplicated by URL and written to a resumable JSON output file — already-processed source references are skipped on re-run.
 
-**Model number extraction** is validated against a blocklist of tokens that match model-number patterns but are not model numbers: capacity values (`500ML`, `1000ML`), wattage (`800W`, `1300W`), voltage/frequency (`230V`, `50HZ`), technology terms (`QLED`, `OLED`, `SMART`), and retailer names. Pure-digit strings are rejected as internal SKUs, and 12+ digit numbers are rejected as EAN look-alikes. A valid model token must contain both letters and digits.
+**Model number extraction** is validated against a blocklist of tokens that look like model numbers but are not: capacity values (`500ML`, `1000ML`), wattage (`800W`, `1300W`), voltage/frequency (`230V`, `50HZ`), technology terms (`QLED`, `OLED`, `SMART`), and retailer names. Pure-digit strings are rejected as internal SKUs, and 12+ digit numbers are rejected as EAN look-alikes. A valid model token must contain both letters and digits.
 
 Brave Search result metadata (title, description, price snippets, thumbnail) is preserved alongside each URL — this provides a price signal even when the page itself is later blocked.
 
@@ -268,6 +133,69 @@ Name similarity uses step 5 only as a fallback to avoid the class of false posit
 
 ---
 
+## Data Storage
+
+All data files live in `data/`. There are three kinds:
+
+```
+data/
+  source_products_tv_&_audio.json       # 17  source products  — your catalog
+  source_products_small_appliances.json # 29  source products
+  source_products_large_appliances.json # 44  source products
+
+  target_pool_tv_&_audio.json           # 561   visible targets  (Amazon AT, MediaMarkt AT)
+  target_pool_small_appliances.json     # 1,683 visible targets
+  target_pool_large_appliances.json     # 3,543 visible targets
+
+  matched_cyberport.json                # 160  hidden competitor records
+  matched_electronic4you.json           # 299  hidden competitor records
+  matched_etec.json                     # 87   hidden competitor records
+  matched_expert.json                   # 31   hidden competitor records
+```
+
+**Source products** are your catalog — the products you want to find competitors for. Each has a stable `reference` (e.g. `P_0A7A0D68`), name, brand, EAN, price, and specifications.
+
+**Target pools** (visible) are pre-supplied structured product lists from Amazon AT and MediaMarkt AT, organised by category. These are matched directly at query time without scraping.
+
+**Matched records** (hidden) are the output of the scraping pipeline — one file per hidden retailer, each containing structured product records discovered and extracted from that retailer's site. These are treated as the "hidden" competitor pool.
+
+The backend loads all files on startup and refreshes them automatically on each query — no restart needed when new files are added.
+
+### Source product format
+
+```json
+{
+  "reference": "P_C2CA4D4D",
+  "name": "Samsung QE55Q7FAAUXXN QLED 4K TV",
+  "brand": "Samsung",
+  "ean": "8806097123057",
+  "price_eur": 799.00,
+  "specifications": {
+    "GTIN": "8806097123057",
+    "Hersteller Modellnummer": "QE55Q7FAAUXXN",
+    "Bildschirmdiagonale": "55 Zoll"
+  }
+}
+```
+
+### Matched competitor record format
+
+```json
+{
+  "reference": "P_SC_A1B2C3D4",
+  "retailer": "Expert AT",
+  "url": "https://www.expert.at/shop/...",
+  "ean": "8806097123057",
+  "name": "Samsung QE55Q7FAAUXXN",
+  "brand": "Samsung",
+  "price_eur": 819.00,
+  "image_url": "https://...",
+  "specifications": { ... }
+}
+```
+
+---
+
 ## Retrieval Pipeline
 
 The retrieval system identifies competitor products for a given source product using a four-stage pipeline. The target pool (visible retailers) is indexed into Qdrant.
@@ -320,18 +248,240 @@ Decisions are parsed and validated — unknown references or malformed output ra
 
 ---
 
+## User Flow
+
+The system runs as a chat application. You talk to it in plain language and it searches the loaded product database in real time.
+
+### Starting the app
+
+```bash
+# Backend
+uv sync
+uv run uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend (separate terminal)
+cd frontend && npm install && npm run dev
+```
+
+Open `http://localhost:8080`.
+
+### Home screen
+
+![Home screen](docs/Home%20Page.png)
+
+The landing screen offers two entry points:
+
+1. **Upload a JSON catalog** — drag and drop a `source_products_*.json` file onto the drop zone. The file is attached to a new session and its products become the search scope for that session.
+2. **Type a query directly** — use the text bar at the bottom, or click one of the four quick-start suggestions. No upload required — the system uses the built-in product catalog by default.
+
+### Querying
+
+Once inside a session, you type natural language queries. The backend parses them for structured signals before searching:
+
+| What you type | What the system understands |
+|---|---|
+| `Show me Samsung TVs` | product type: tv, anchor: samsung |
+| `Find washing machines under €600` | product type: washer, max price: €600 |
+| `Competitors for P_0A7A0D68` | direct source reference lookup |
+| `Show only Cyberport results` | retailer filter: Cyberport AT |
+| `Find all dishwashers` | product type: dishwasher, all sources |
+
+The assistant always tells you what it understood — applied filters, which products had matches, which did not, and which retailers the links came from.
+
+### Response
+
+![Product page](docs/Product%20Page.png)
+
+Each response includes:
+
+- A **natural language summary** — what was found, for which products, from which retailers, and what was not matched
+- A **product card grid** — one card per competitor match, showing name, retailer, price, image, and a direct link to the competitor page
+- A collapsible **Submission JSON block** — the scoring-format output (`source_reference` + `competitors[]`) ready for export
+
+Follow-up queries work within the same session. Filter-only follow-ups like "only under €500" or "only from Expert" reuse the previous product context automatically.
+
+### Scoring output format
+
+The backend returns and persists matches in this format:
+
+```json
+[
+  {
+    "source_reference": "P_49A0DBE2",
+    "competitors": [
+      {
+        "reference": "P_0243A3DB",
+        "competitor_retailer": "MediaMarkt AT",
+        "competitor_product_name": "Bosch Geschirrspüler Serie 4",
+        "competitor_url": "https://www.mediamarkt.at/product/12345",
+        "competitor_price": 449.99
+      }
+    ]
+  }
+]
+```
+
+Scoring keys:
+- Visible retailers: `source_reference` + `competitors[].reference`
+- Hidden retailers: `source_reference` + `competitors[].competitor_url`
+
+Output is automatically saved to `data/matched_ui_output.json` after each query.
+
+---
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         DATA LAYER  (data/)                         │
+│                                                                     │
+│  source_products_*.json     target_pool_*.json    matched_*.json   │
+│  (your catalog, 90 SKUs)    (visible retailers,   (hidden retailers │
+│                              5,787 products)       577 products)    │
+└──────────────────┬────────────────────┬───────────────────┬────────┘
+                   │                    │                   │
+                   │      loaded on startup, refreshed      │
+                   │      automatically on each query       │
+                   │                    │                   │
+                   └────────────────────▼───────────────────┘
+                                        │
+                         ┌──────────────▼──────────────┐
+                         │   CatalogMatcher             │
+                         │   backend/matcher_service.py │
+                         │                              │
+                         │  1. Parse query intent       │
+                         │     (kind, category,         │
+                         │      retailer, price,        │
+                         │      anchor tokens)          │
+                         │                              │
+                         │  2. Select source products   │
+                         │     matching the query       │
+                         │                              │
+                         │  3. Score each source vs     │
+                         │     all 6,364 targets        │
+                         │     (score_product_match,    │
+                         │      threshold 0.80)         │
+                         │                              │
+                         │  4. Deduplicate + rank       │
+                         │     per source product       │
+                         └──────────────┬──────────────┘
+                                        │
+                         ┌──────────────▼──────────────┐
+                         │   FastAPI                    │
+                         │   backend/api.py             │
+                         │                              │
+                         │  POST /api/v1/chat           │
+                         │  GET  /api/v1/health         │
+                         │                              │
+                         │  Builds natural language     │
+                         │  answer + card payload       │
+                         │  + scoring-format JSON       │
+                         └──────────────┬──────────────┘
+                                        │  JSON over HTTP
+                         ┌──────────────▼──────────────┐
+                         │   React Frontend             │
+                         │   frontend/src/              │
+                         │                              │
+                         │  Chat UI with session        │
+                         │  history (IndexedDB)         │
+                         │                              │
+                         │  Answer text (pre-line)      │
+                         │  Product card grid           │
+                         │  Submission JSON toggle      │
+                         └─────────────────────────────┘
+
+                    ┌────────────────────────────────────┐
+                    │   Scraping Pipeline  (scrape/)     │
+                    │                                    │
+                    │  Brave Search API                  │
+                    │    → site: queries per retailer    │
+                    │    → URL discovery + snippets      │
+                    │                                    │
+                    │  Playwright (optional)             │
+                    │    → headless Chromium             │
+                    │    → ld+json, __NEXT_DATA__,       │
+                    │      hydration blobs               │
+                    │                                    │
+                    │  parser_raw.py (optional)          │
+                    │    → structured field extraction   │
+                    │                                    │
+                    │  Output: matched_*.json            │
+                    │  (feeds back into data layer)      │
+                    └────────────────────────────────────┘
+```
+
+### Key design decisions
+
+**No database server required for the UI.** The matching engine loads all JSON files directly into memory on startup. With ~6,400 target products this fits comfortably in RAM and keeps the deployment to a single `uvicorn` process plus the frontend dev server.
+
+**Scoring, not vector search, for the API.** The chat API uses `score_product_match` — a deterministic scorer that checks EAN, model number, brand, name similarity, and screen size in priority order. This is fast (no network call), fully explainable, and precise enough for the product overlap seen across Austrian retailers.
+
+**Vector search for the CLI pipeline.** The `main.py` CLI uses Qdrant with BM25 + dense vectors + LLM reranking for the harder matching task of finding candidates from scratch across a large catalog.
+
+**Hidden vs visible split.** Visible retailer products (`target_pool_*.json`) are matched by reference. Hidden retailer products (`matched_*.json`) are matched by URL, because references are not stable across sites.
+
+**Session persistence in the browser.** Chat history, uploaded catalogs, and previous submissions are stored in IndexedDB — nothing is stored server-side beyond `data/matched_ui_output.json`.
+
+---
+
+## Project Structure
+
+```
+backend/
+  api.py                          # FastAPI chat endpoint (/api/v1/chat, /api/v1/health)
+  matcher_service.py              # CatalogMatcher: query intent parsing + product scoring
+
+frontend/
+  src/pages/Index.tsx             # Main chat + session UI
+  src/components/
+    DropZone.tsx                  # JSON file upload zone
+    ChatMessage.tsx               # Message renderer (text bubble or product card grid)
+    ProductCard.tsx               # Single competitor match card
+    SessionSidebar.tsx            # Session list + navigation
+    ChatInput.tsx                 # Text input bar
+  src/lib/db.ts                   # IndexedDB session persistence
+  src/lib/api.ts                  # Backend API client
+
+data/
+  source_products_*.json          # Source products to match (your catalog)
+  target_pool_*.json              # Visible-retailer product pools (Amazon, MediaMarkt)
+  matched_*.json                  # Hidden-retailer competitor records (scraping output)
+
+scrape/
+  run_all_categories_brave.py     # Primary: auto-discover all source categories and scrape each
+  scraper_brave.py                # Phase 1a: Brave Search API → product URLs + snippets
+  merge_brave_to_matched.py       # Build matched_cyberport/electronic4you from Brave raw outputs
+  scraper_playwright.py           # Optional Phase 1b: Playwright → full page JSON extraction
+  parser_raw.py                   # Optional Phase 2: Raw page JSON → structured product records
+  match_targets.py                # Deterministic matching against visible-retailer pool
+
+retrieval/
+  indexing.py                     # Qdrant collection setup + product upsert (dense + BM25)
+  qdrant_retrieval.py             # Hybrid retrieval: dense + BM25 with RRF fusion
+  exact_match.py                  # Deterministic field-weight exact match
+  generation.py                   # LLM-based match / no-match filtering
+  embeddings.py                   # Embedding API calls (OpenRouter)
+
+matching_utils.py                 # Shared deterministic scorer (CLI + API)
+main.py                           # CLI: full Qdrant retrieval pipeline
+initialize_db.py                  # CLI: load JSON files and index into Qdrant
+constants.py                      # Paths, model names, Qdrant config
+```
+
+---
+
 ## Setup
 
-**Requirements**: Python 3.13, Docker (for Qdrant), a Brave Search API key, an OpenRouter API key.
+**Requirements**: Python 3.13, Node.js, Docker (for Qdrant), a Brave Search API key, an OpenRouter API key.
 
 ```bash
 git clone <repo>
 cd <repo>
 
-# Install dependencies
+# Install Python dependencies
 uv sync
 
-# Install Playwright browser
+# Install Playwright browser (only needed for Phase 1b scraping)
 uv run playwright install chromium
 ```
 
@@ -349,7 +499,7 @@ ANTHROPIC_BASE_URL=https://openrouter.ai/api/v1
 ANTHROPIC_AUTH_TOKEN=sk-or-...
 ```
 
-Start Qdrant:
+Start Qdrant (only needed for the CLI retrieval pipeline):
 
 ```bash
 docker run -p 6333:6333 -p 6334:6334 \
@@ -361,7 +511,23 @@ docker run -p 6333:6333 -p 6334:6334 \
 
 ## Usage
 
-### Hidden retailers (all categories, primary flow)
+### Run the chat interface (primary)
+
+```bash
+# Backend
+uv run uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend
+cd frontend && npm install && npm run dev
+```
+
+Health check:
+
+```bash
+curl -sS http://127.0.0.1:8000/api/v1/health
+```
+
+### Scrape hidden retailers (all categories)
 
 ```bash
 cd scrape
@@ -387,7 +553,7 @@ python3 scraper_playwright.py
 python3 parser_raw.py
 ```
 
-### Matching visible-retailer pools
+### Match visible-retailer pools
 
 ```bash
 cd scrape
@@ -408,7 +574,7 @@ python3 match_targets.py \
   --output "../output/matches_large_appliances.json"
 ```
 
-### Indexing into Qdrant
+### CLI retrieval pipeline (Qdrant)
 
 ```bash
 # Index all configured data files
@@ -416,9 +582,12 @@ uv run python initialize_db.py
 
 # Test with 10 products, drop and recreate collection first
 uv run python initialize_db.py --limit 10 --fresh
+
+# Run the full retrieval pipeline
+uv run python main.py
 ```
 
-Data files to index are configured in `constants.py` (example):
+Data files to index are configured in `constants.py`:
 
 ```python
 DATA_FILES = [
@@ -431,37 +600,24 @@ DATA_FILES = [
     "output/matched_electronic4you.json",
 ]
 ```
+Evaluate:
 
----
 
-## Data Format Reference
+  uv run main.py
+  uv run main.py --source "data/source_products_small_appliances.json" --category "Small Appliances" --run-name small_appliances
+  uv run main.py --source "data/source_products_large_appliances.json" --category "Large Appliances" --run-name large_appliances
 
-**Source product** (`data/source_products_*.json`):
+  
+  # Visible run — source auto-maps to correct category filter
+  uv run python main.py --source data/source_products_tv_&_audio.json
+  uv run python main.py --source data/source_products_small_appliances.json
+  uv run python main.py --source data/source_products_large_appliances.json
 
-```json
-{
-  "reference": "P_C2CA4D4D",
-  "name": "Samsung QE55Q7FAAUXXN QLED 4K TV",
-  "brand": "Samsung",
-  "ean": "8806097123057",
-  "price_eur": 799.00,
-  "retailer": "MediaMarkt",
-  "specifications": { "Hersteller Modellnummer": "QE55Q7FAAUXXN" }
-}
-```
+  # Scraped run — same source files, but retrieves only from category="scraped"
+  uv run python main.py --source "data/source_products_tv_&_audio.json" --scraped
+  uv run python main.py --source data/source_products_small_appliances.json --scraped
+  uv run python main.py --source data/source_products_large_appliances.json --scraped
 
-**Matched competitor record** (`output/matched_*.json`):
-
-```json
-{
-  "reference": "P_SC_A1B2C3D4",
-  "retailer": "Expert AT",
-  "url": "https://www.expert.at/shop/...",
-  "ean": "8806097123057",
-  "name": "Samsung QE55Q7FAAUXXN",
-  "brand": "Samsung",
-  "price_eur": 819.00,
-  "image_url": "https://...",
-  "specifications": { ... }
-}
-```
+  uv run python initialize_db.py --targets visible   # only visible target pool
+  uv run python initialize_db.py --targets scraped   # only scraped hidden retailers
+  uv run python initialize_db.py --targets all       # both

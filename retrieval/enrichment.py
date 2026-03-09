@@ -64,8 +64,24 @@ def classify_product_types(
 
     for i in range(0, len(products), batch_size):
         batch = products[i : i + batch_size]
-        lines = [f"{p['reference']} | {(p.get('name') or '')[:120]}" for p in batch]
+        lines = []
+        for p in batch:
+            specs = p.get("specifications") or {}
+            key_spec_keys = ("Hersteller Modellnummer", "Hersteller Artikelnummer", "Modellnummer", "Marke", "Hersteller", "GTIN")
+            key_specs = {k: v for k, v in specs.items() if k in key_spec_keys and v}
+            parts = [f"{p['reference']}"]
+            parts.append(f"Name: {(p.get('name') or '')[:120]}")
+            if p.get("brand"):
+                parts.append(f"Brand: {p['brand']}")
+            if p.get("category"):
+                parts.append(f"Category: {p['category']}")
+            if key_specs:
+                parts.append("Specs: " + ", ".join(f"{k}={v}" for k, v in key_specs.items()))
+            lines.append(" | ".join(parts))
         raw = _call_openrouter(ENRICHMENT_SYSTEM, "\n".join(lines), model, api_key)
+        print(f"  LLM raw classification output (batch {i//batch_size+1}):")
+        for line in raw.splitlines():
+            print(f"    {line}")
 
         for line in raw.splitlines():
             line = line.strip()
@@ -94,7 +110,7 @@ _MODEL_NUMBER_SPEC_KEYS = (
     "Herstellernummer", "Modellnummer", "Artikelnummer",
 )
 
-_BRAND_SPEC_KEYS = ("Marke", "Hersteller", "Brand")
+_BRAND_SPEC_KEYS = ("Marke", "Brand", "Hersteller")
 
 # Known brands for first-word matching (lowercase)
 _KNOWN_BRANDS = {
@@ -162,20 +178,13 @@ def extract_structured_fields(product: dict) -> dict:
     if result_size:
         size, size_unit = result_size
 
-    # model_number — prefer spec fields over regex
+    # model_number — spec fields only (EAN/GTIN are handled separately as direct terms)
     model_number = None
     for key in _MODEL_NUMBER_SPEC_KEYS:
         val = specs.get(key)
         if val and str(val).strip():
             model_number = str(val).strip()
             break
-    # fallback: also check top-level ean/gtin
-    if not model_number:
-        for key in ("ean", "gtin"):
-            val = product.get(key)
-            if val:
-                model_number = str(val).strip()
-                break
 
     # resolution
     resolution = None
@@ -217,9 +226,13 @@ def enrich_products(
     type_map = classify_product_types(products, api_key, model)
 
     enriched = []
+    print("\nEnrichment results:")
     for p in products:
         e = dict(p)
         e["product_type"] = type_map[p["reference"]]
         e.update(extract_structured_fields(p))
         enriched.append(e)
+        print(f"  {p['reference']} | type={e['product_type']:20s} | brand={e.get('brand_norm') or '-':12s} | "
+              f"size={str(e.get('size') or '-'):6s}{e.get('size_unit') or '':4s} | "
+              f"model={e.get('model_number') or '-':20s} | res={e.get('resolution') or '-'}")
     return enriched

@@ -118,12 +118,13 @@ def index_products(
     embedding_model: str,
     embedding_dim: int,
     api_key: str,
+    enrichment_model: str = "anthropic/claude-haiku-4-5",
 ) -> None:
     client = QdrantClient(url=qdrant_url)
     ensure_collection(client, collection, embedding_dim)
 
-    print("Running product enrichment (product_type, brand_norm, screen_size_inch, model_number, resolution)...")
-    products = enrich_products(products, api_key)
+    print(f"Running product enrichment (model={enrichment_model})...")
+    products = enrich_products(products, api_key, model=enrichment_model)
 
     bm25_model = SparseTextEmbedding("Qdrant/bm25")
 

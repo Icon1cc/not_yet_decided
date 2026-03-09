@@ -1,0 +1,27 @@
+  [                                                                                                                                                  {                                                                                                                                            
+      "source_reference": "P_0A7A0D68",                                                                                                          
+      "competitors": [
+        {
+          "reference": "P_7F413D7D",
+          "competitor_retailer": "MediaMarkt AT",
+          "competitor_product_name": "SAMSUNG F6000 (2025) 24 Zoll Full HD Smart TV",
+          "competitor_url": "https://www.mediamarkt.at/de/product/_samsung-f6000-2025-24-zoll-full-hd-smart-tv-2026399.html",
+          "competitor_price": 199.0
+        },
+        {
+          "reference": "P_0A7A0D68",
+          "competitor_retailer": "MediaMarkt AT",
+          "competitor_product_name": "SAMSUNG F6000 (2025) 32 Zoll FullHD Smart TV",
+          "competitor_url": "https://www.mediamarkt.at/de/product/_samsung-f6000-2025-32-zoll-fullhd-smart-tv-2026398.html",
+          "competitor_price": 299.0
+        },
+        {
+          "reference": "P_7F42A4AC",
+          "competitor_retailer": "MediaMarkt AT",
+          "competitor_product_name": "SAMSUNG F6000 (2025) 40 Zoll FullHD Smart TV",
+          "competitor_url": "https://www.mediamarkt.at/de/product/_samsung-f6000-2025-40-zoll-fullhd-smart-tv-2026397.html",
+          "competitor_price": 399.0
+        }
+      ]
+    }
+  ]

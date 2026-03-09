@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 import yaml
@@ -38,9 +39,35 @@ def fuse(
     return merged
 
 
-def main():
+def main(source_override=None, category_override=None, run_name_override=None, use_scraped=False):
+    from constants import SCRAPED_CATEGORY, SOURCE_CATEGORY_MAP
+
     with open("config.yaml", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    if source_override:
+        cfg["data"]["source"] = source_override
+
+    if use_scraped:
+        cfg["qdrant"]["category_filter"] = SCRAPED_CATEGORY
+    elif category_override:
+        cfg["qdrant"]["category_filter"] = category_override
+    elif cfg["data"]["source"] in SOURCE_CATEGORY_MAP:
+        cfg["qdrant"]["category_filter"] = SOURCE_CATEGORY_MAP[cfg["data"]["source"]]
+
+    # auto-derive run_name from source filename + mode if not explicitly provided
+    if run_name_override:
+        cfg["output"]["run_name"] = run_name_override
+    else:
+        import pathlib
+        stem = pathlib.Path(cfg["data"]["source"]).stem  # e.g. "source_products_tv_&_audio"
+        short = stem.replace("source_products_", "").replace("_&_", "_")  # "tv_audio"
+        suffix = "_scraped" if use_scraped else ""
+        cfg["output"]["run_name"] = f"{short}{suffix}"
+
+    print(f"Source : {cfg['data']['source']}")
+    print(f"Category filter: {cfg['qdrant']['category_filter']}")
+    print(f"Scraped mode: {use_scraped}")
 
     sources = load_json(cfg["data"]["source"])
 
@@ -51,8 +78,10 @@ def main():
     exact_cfg = cfg["exact_match"]
     qdrant_cfg = cfg["qdrant"]
     llm_model = cfg["llm"]["model"]
+    expansion_model = cfg["llm"].get("expansion_model") or llm_model
     batch_size = cfg["llm"]["batch_size"]
     max_candidates = cfg["llm"]["max_candidates"]
+    skip_llm = cfg["llm"].get("skip_llm", False)
 
     retriever = QdrantRetriever(
         qdrant_cfg["collection"],
@@ -76,11 +105,27 @@ def main():
     for source in sources:
         exact_hits = exact_match(source, targets, exact_cfg["columns"], exact_cfg["threshold"])
 
-        terms = expand_query(source, llm_model)
+        # price range filter
+        price = source.get("price_eur")
+        factor = qdrant_cfg.get("price_range_factor")
+        price_range = (price * (1 - factor), price * (1 + factor)) if price and factor else None
+
+        # size range filter
+        size = source.get("size")
+        size_delta = qdrant_cfg.get("size_range_delta")
+        size_range = (size - size_delta, size + size_delta) if size and size_delta else None
+        size_unit = source.get("size_unit") if size_range else None
+
+        terms = expand_query(source, llm_model, expansion_model=expansion_model)
         bm25_hits = retriever.retrieve_multi(
             terms,
             top_k_per_term=qdrant_cfg["top_k_per_term"],
             category=qdrant_cfg["category_filter"],
+            product_type=source.get("product_type"),
+            brand_norm=source.get("brand_norm"),
+            price_range=price_range,
+            size_range=size_range,
+            size_unit=size_unit,
             min_score=qdrant_cfg["min_score"],
         )
 
@@ -111,12 +156,30 @@ def main():
         for c in candidates:
             print(f"    {c['reference']} | {c.get('name','')[:60]}")
 
-        result = filter_candidates(source, candidates, llm_model, batch_size)
+        if skip_llm:
+            # bypass LLM — treat all candidates (excluding self) as matches
+            non_self = [c for c in candidates if c["reference"] != source["reference"]]
+            from models import Competitor
+            result = SourceMatch(
+                source_reference=ref,
+                competitors=[
+                    Competitor(
+                        reference=c["reference"],
+                        competitor_retailer=c.get("retailer") or "",
+                        competitor_product_name=c.get("name") or "",
+                        competitor_url=c.get("url"),
+                        competitor_price=c.get("price_eur"),
+                    )
+                    for c in non_self
+                ],
+            )
+        else:
+            result = filter_candidates(source, candidates, llm_model, batch_size)
         llm_results[ref] = result
 
-        print(f"  → matched={len(result.competitors)}")
+        print(f"  matched={len(result.competitors)}")
         for c in result.competitors:
-            print(f"    [✓] {c.reference} | {c.competitor_product_name[:60]}")
+            print(f"    [OK] {c.reference} | {c.competitor_product_name[:60]}")
 
     # ── Phase 3: assemble + print summary ────────────────────────────────────
     print("\n" + "=" * 70)
@@ -142,7 +205,7 @@ def main():
         print(f"  LLM kept:")
         if llm_result.competitors:
             for c in llm_result.competitors:
-                print(f"    [✓] {c.reference} | {c.competitor_product_name[:50]}")
+                print(f"    [OK] {c.reference} | {c.competitor_product_name[:50]}")
         else:
             print(f"    (none)")
 
@@ -173,9 +236,15 @@ def main():
         writer.writeheader()
         writer.writerows(csv_rows)
 
-    print(f"\nWrote {len(submission)} entries → {out_path}")
-    print(f"Wrote scores → {csv_path}")
+    print(f"\nWrote {len(submission)} entries -> {out_path}")
+    print(f"Wrote scores -> {csv_path}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source", help="Override data.source from config")
+    parser.add_argument("--category", help="Override qdrant.category_filter from config")
+    parser.add_argument("--run-name", help="Override output.run_name from config")
+    parser.add_argument("--scraped", action="store_true", help="Query against scraped hidden-retailer products (category='scraped')")
+    args = parser.parse_args()
+    main(source_override=args.source, category_override=args.category, run_name_override=args.run_name, use_scraped=args.scraped)

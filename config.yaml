@@ -2,29 +2,42 @@ data:
   source: data/source_products_tv_&_audio.json
 
 subset:
-  n: 3  # number of source products to test on; set to null for all
+  n: null  # number of source products to test on; set to null for all
 
 exact_match:
-  # min cumulative weight to include a candidate as a match
-  # 0.4 = requires at minimum a name match; price alone (0.2) no longer qualifies
+  # Any single weight-1.0 hit = guaranteed match; name alone = 0.4 (below threshold)
   threshold: 0.4
   columns:
+    # EAN/GTIN — cross-field because sources store in `ean`, targets in specs.GTIN
     - source_field: ean
+      target_field: ean
+      weight: 1.0
+    - source_field: ean
+      target_field: specifications.GTIN
+      weight: 1.0
+    - source_field: specifications.GTIN
       target_field: ean
       weight: 1.0
     - source_field: specifications.GTIN
       target_field: specifications.GTIN
       weight: 1.0
-    - source_field: name
-      target_field: name
-      weight: 0.4
+    # Model number — strong signal when present
+    - source_field: specifications.Hersteller Modellnummer
+      target_field: specifications.Hersteller Modellnummer
+      weight: 1.0
+    - source_field: specifications.Hersteller Modellnummer
+      target_field: specifications.Modellname
+      weight: 0.8
+    - source_field: specifications.Hersteller Modellnummer
+      target_field: specifications.Modellnummer
+      weight: 0.8
 
 qdrant:
   url: "http://localhost:6333"
   collection: "products"
   embedding_model: "openai/text-embedding-3-small"
   embedding_dim: 1536
-  top_k_per_term: 10   # BM25 results per query expansion term (union across all terms)
+  top_k_per_term: 20   # BM25 results per query expansion term (union across all terms)
   min_score: 0.0       # include all BM25 hits; LLM does the filtering
   category_filter: "TV & Audio"  # null = no filter; must match product["category"] exactly
   price_range_factor: 0.3  # filter targets within ±30% of source price; null-price targets always included
@@ -32,8 +45,10 @@ qdrant:
 
 llm:
   model: anthropic/claude-sonnet-4-5
+  expansion_model: anthropic/claude-sonnet-4-5
   batch_size: 8
-  max_candidates: 15  # cap candidates sent to LLM (top by score)
+  max_candidates: 25  # cap candidates sent to LLM (top by score)
+  skip_llm: true      # bypass LLM filter — output all candidates as matches (for recall diagnosis)
 
 output:
   dir: output

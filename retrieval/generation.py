@@ -24,19 +24,31 @@ def _call_openrouter(system: str, user: str, model: str) -> str:
 def _parse_decisions(response: str, candidates: list[dict]) -> list[str]:
     """Parse 'P_XXXXX: MATCH/NO_MATCH' lines, return list of matched references."""
     valid_refs = {c["reference"] for c in candidates}
+    seen_refs: set[str] = set()
     matched = []
     for line in response.splitlines():
         line = line.strip()
         if not line:
             continue
-        assert ": " in line, f"Unexpected LLM output line (missing ': '): {line!r}"
+        if ": " not in line:
+            raise ValueError(f"LLM output line missing ': ' separator: {line!r}\nFull response:\n{response}")
         ref, decision = line.split(": ", 1)
-        ref, decision = ref.strip().strip("[]"), decision.strip()
-        decision = decision.upper().strip().rstrip(".")
-        assert ref in valid_refs, f"LLM returned unknown reference: {ref!r}"
-        assert decision in ("MATCH", "NO_MATCH"), f"Unexpected decision for {ref}: {decision!r}"
+        ref = ref.strip()
+        if ref.startswith("[") or ref.endswith("]"):
+            raise ValueError(f"LLM wrapped reference in brackets (prompt format error): {line!r}\nFull response:\n{response}")
+        decision = decision.strip().upper().rstrip(".")
+        if ref not in valid_refs:
+            raise ValueError(f"LLM returned unknown reference {ref!r} (not in candidate batch)\nFull response:\n{response}")
+        if decision not in ("MATCH", "NO_MATCH"):
+            raise ValueError(f"LLM returned invalid decision for {ref!r}: {decision!r}\nFull response:\n{response}")
+        if ref in seen_refs:
+            raise ValueError(f"LLM returned duplicate decision for {ref!r}\nFull response:\n{response}")
+        seen_refs.add(ref)
         if decision == "MATCH":
             matched.append(ref)
+    missing = valid_refs - seen_refs
+    if missing:
+        print(f"  [WARN] LLM skipped {len(missing)} candidates (treating as NO_MATCH): {missing}")
     return matched
 
 
@@ -48,7 +60,12 @@ def filter_candidates(
     LLM outputs '<reference>: MATCH/NO_MATCH' per line.
     Returns SourceMatch with all confirmed matches.
     """
-    candidates = [c for c in candidates if c["reference"] != source["reference"]]
+    src_retailer = source.get("retailer")
+    candidates = [
+        c for c in candidates
+        if c["reference"] != source["reference"]
+        and (src_retailer is None or c.get("retailer") != src_retailer)
+    ]
     if not candidates:
         return SourceMatch(source_reference=source["reference"], competitors=[])
 
@@ -60,7 +77,7 @@ def filter_candidates(
         prompt = build_match_prompt(source, batch)
 
         b = i // batch_size + 1
-        print(f"\n  ── LLM batch {b} ({len(batch)} candidates) ──────────────────────────")
+        print(f"\n  -- LLM batch {b} ({len(batch)} candidates) --------------------------")
         print(f"  SOURCE : [{source['reference']}] {(source.get('name') or '')[:80]}")
         brand = source.get('brand') or '-'
         price = source.get('price_eur') or '-'
